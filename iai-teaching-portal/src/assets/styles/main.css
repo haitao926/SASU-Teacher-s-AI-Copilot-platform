@@ -1,0 +1,13 @@
+/* 导入设计系统变量 */
+@import './variables.css';
+
+/* 导入样式重置 */
+@import './reset.css';
+
+/* 导入动画效果 */
+@import './animations.css';
+
+/* Tailwind CSS 基础样式 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

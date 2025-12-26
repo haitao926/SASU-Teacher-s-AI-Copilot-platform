@@ -1,0 +1,164 @@
+/* 全局动画效果 */
+
+/* 淡入动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 上滑进入 */
+@keyframes slideUp {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 下滑进入 */
+@keyframes slideDown {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 缩放进入 */
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 脉冲动画 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* 旋转动画 */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 骨架屏闪烁 */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* 通用动画类 */
+.animate-fade-in {
+  animation: fadeIn var(--transition-slow) var(--ease-in-out);
+}
+
+.animate-slide-up {
+  animation: slideUp var(--transition-slow) var(--ease-in-out);
+}
+
+.animate-slide-down {
+  animation: slideDown var(--transition-slow) var(--ease-in-out);
+}
+
+.animate-scale-in {
+  animation: scaleIn var(--transition-slow) var(--ease-in-out);
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* 过渡效果类 */
+.transition-all {
+  transition: all var(--transition-base) var(--ease-in-out);
+}
+
+.transition-colors {
+  transition: color var(--transition-base) var(--ease-in-out),
+              background-color var(--transition-base) var(--ease-in-out),
+              border-color var(--transition-base) var(--ease-in-out);
+}
+
+.transition-transform {
+  transition: transform var(--transition-base) var(--ease-in-out);
+}
+
+.transition-opacity {
+  transition: opacity var(--transition-base) var(--ease-in-out);
+}
+
+/* 卡片悬停效果 */
+.card-hover {
+  transition: all var(--transition-slow) var(--ease-in-out);
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* 按钮点击效果 */
+.btn-press:active {
+  transform: scale(0.98);
+}
+
+/* 渐进加载效果 */
+.stagger-item {
+  animation: slideUp var(--transition-slow) var(--ease-in-out) backwards;
+}
+
+.stagger-item:nth-child(1) { animation-delay: 0ms; }
+.stagger-item:nth-child(2) { animation-delay: 50ms; }
+.stagger-item:nth-child(3) { animation-delay: 100ms; }
+.stagger-item:nth-child(4) { animation-delay: 150ms; }
+.stagger-item:nth-child(5) { animation-delay: 200ms; }
+.stagger-item:nth-child(6) { animation-delay: 250ms; }
+.stagger-item:nth-child(7) { animation-delay: 300ms; }
+.stagger-item:nth-child(8) { animation-delay: 350ms; }
+.stagger-item:nth-child(9) { animation-delay: 400ms; }
+
+/* 骨架屏效果 */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--gray-200) 0%,
+    var(--gray-100) 50%,
+    var(--gray-200) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}

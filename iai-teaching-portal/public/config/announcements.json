@@ -1,0 +1,44 @@
+{
+  "announcements": [
+    {
+      "id": "ann-001",
+      "title": "智能组卷功能正式上线",
+      "content": "全新的智能组卷系统已上线，支持按知识点和难度自动生成试卷，欢迎体验！",
+      "time": "2025-12-15 10:30",
+      "tag": "新功能",
+      "tagType": "info",
+      "pinned": true,
+      "read": false
+    },
+    {
+      "id": "ann-002",
+      "title": "消息通知中心系统维护通知",
+      "content": "消息通知中心将于今晚 22:00-23:00 进行系统升级，期间功能暂时不可用，请知悉。",
+      "time": "2025-12-17 14:20",
+      "tag": "维护",
+      "tagType": "warning",
+      "pinned": true,
+      "read": false
+    },
+    {
+      "id": "ann-003",
+      "title": "AI 作业批改功能优化",
+      "content": "优化了批改速度和准确率，新增错误类型统计功能。",
+      "time": "2025-12-10 09:15",
+      "tag": "更新",
+      "tagType": "success",
+      "pinned": false,
+      "read": true
+    },
+    {
+      "id": "ann-004",
+      "title": "寒假教学资源更新",
+      "content": "教学资源库已更新大量寒假作业资源和复习材料，欢迎下载使用。",
+      "time": "2025-12-08 16:45",
+      "tag": "通知",
+      "tagType": "info",
+      "pinned": false,
+      "read": true
+    }
+  ]
+}

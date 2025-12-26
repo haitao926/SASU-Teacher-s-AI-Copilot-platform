@@ -1,0 +1,237 @@
+{
+  "groups": [
+    {
+      "id": "teaching-flow",
+      "name": "教学流程",
+      "icon": "mdi:school",
+      "order": 1
+    },
+    {
+      "id": "classroom-tools",
+      "name": "课堂工具",
+      "icon": "mdi:presentation",
+      "order": 2
+    },
+    {
+      "id": "resources",
+      "name": "备课/资源",
+      "icon": "mdi:book-open-variant",
+      "order": 3
+    },
+    {
+      "id": "assessment",
+      "name": "测评/批改",
+      "icon": "mdi:clipboard-check",
+      "order": 4
+    },
+    {
+      "id": "analytics",
+      "name": "数据分析",
+      "icon": "mdi:chart-line",
+      "order": 5
+    },
+    {
+      "id": "communication",
+      "name": "通知/沟通",
+      "icon": "mdi:bell",
+      "order": 6
+    }
+  ],
+  "entries": [
+    {
+      "id": "ai-grading",
+      "name": "AI 作业批改",
+      "description": "上传作业批量评分，自动生成讲评建议与错误分析",
+      "icon": "gradient-purple",
+      "tags": ["AI批改", "自动评分", "测评"],
+      "url": "https://grading.example.com?source=iai-portal",
+      "status": "available",
+      "featured": true,
+      "group": "assessment",
+      "usage": 1280,
+      "order": 1
+    },
+    {
+      "id": "lesson-plan-assistant",
+      "name": "智能备课助手",
+      "description": "根据教学大纲快速生成教案框架，推荐教学资源",
+      "icon": "gradient-blue",
+      "tags": ["备课", "教案生成", "AI辅助"],
+      "url": "https://lesson.example.com?source=iai-portal",
+      "status": "available",
+      "featured": true,
+      "group": "resources",
+      "usage": 980,
+      "order": 2
+    },
+    {
+      "id": "classroom-interaction",
+      "name": "课堂互动工具",
+      "description": "实时投票、随机点名、小组讨论、弹幕互动",
+      "icon": "gradient-green",
+      "tags": ["课堂互动", "实时反馈"],
+      "url": "https://interact.example.com?source=iai-portal",
+      "status": "available",
+      "featured": false,
+      "group": "classroom-tools",
+      "usage": 756,
+      "order": 3
+    },
+    {
+      "id": "student-portrait",
+      "name": "学情分析",
+      "description": "学生学习画像、成绩趋势、知识点掌握情况可视化",
+      "icon": "gradient-orange",
+      "tags": ["数据分析", "学情报告"],
+      "url": "https://analytics.example.com?source=iai-portal",
+      "status": "available",
+      "featured": false,
+      "group": "analytics",
+      "usage": 523,
+      "order": 4
+    },
+    {
+      "id": "exam-generator",
+      "name": "智能组卷",
+      "description": "基于知识点和难度自动生成试卷，支持导出 Word/PDF",
+      "icon": "gradient-red",
+      "tags": ["组卷", "试卷生成", "测评"],
+      "url": "https://exam.example.com?source=iai-portal",
+      "status": "new",
+      "featured": true,
+      "group": "assessment",
+      "usage": 89,
+      "order": 5
+    },
+    {
+      "id": "resource-library",
+      "name": "教学资源库",
+      "description": "课件、视频、习题、素材一站式检索与下载",
+      "icon": "gradient-teal",
+      "tags": ["资源库", "素材"],
+      "url": "https://resources.example.com?source=iai-portal",
+      "status": "available",
+      "featured": false,
+      "group": "resources",
+      "usage": 1120,
+      "order": 6
+    },
+    {
+      "id": "notification-center",
+      "name": "消息通知中心",
+      "description": "查看系统通知、教学提醒、家校沟通记录",
+      "icon": "gradient-pink",
+      "tags": ["通知", "消息"],
+      "url": "https://notify.example.com?source=iai-portal",
+      "status": "maintenance",
+      "featured": false,
+      "group": "communication",
+      "usage": 430,
+      "order": 7
+    },
+    {
+      "id": "teaching-schedule",
+      "name": "教学日程管理",
+      "description": "课程表、作业提醒、考试安排一目了然",
+      "icon": "gradient-indigo",
+      "tags": ["日程", "课程表"],
+      "url": "https://schedule.example.com?source=iai-portal",
+      "status": "available",
+      "featured": false,
+      "group": "teaching-flow",
+      "usage": 645,
+      "order": 8
+    },
+    {
+      "id": "smart-ocr",
+      "name": "智能 OCR (小工具)",
+      "description": "截图识别文字、公式与化学符号",
+      "icon": "gradient-blue",
+      "tags": ["OCR", "工具", "识别"],
+      "url": "/apps/ocr",
+      "status": "new",
+      "featured": true,
+      "group": "classroom-tools",
+      "usage": 0,
+      "order": 9
+    },
+    {
+      "id": "image-gen",
+      "name": "图片生成与编辑",
+      "description": "AI 辅助生成教学素材与图片编辑",
+      "icon": "gradient-purple",
+      "tags": ["AI绘图", "备课", "素材"],
+      "url": "/apps/image-gen",
+      "status": "new",
+      "featured": true,
+      "group": "resources",
+      "usage": 0,
+      "order": 10
+    },
+    {
+      "id": "ai-assistant",
+      "name": "AI 教学助手",
+      "description": "基于大模型的教学问答与资料检索 (RAG)",
+      "icon": "gradient-green",
+      "tags": ["AI聊天", "备课", "助手"],
+      "url": "/apps/chat",
+      "status": "new",
+      "featured": true,
+      "group": "teaching-flow",
+      "usage": 0,
+      "order": 11
+    },
+    {
+      "id": "interaction-design",
+      "name": "教学交互体验设计",
+      "description": "设计并预览交互式教学网页内容",
+      "icon": "gradient-orange",
+      "tags": ["交互", "HTML", "设计"],
+      "url": "/apps/interaction",
+      "status": "new",
+      "featured": false,
+      "group": "classroom-tools",
+      "usage": 0,
+      "order": 12
+    },
+    {
+      "id": "ppt-design",
+      "name": "PPT 智能设计",
+      "description": "快速生成教学 PPT 大纲与风格预览",
+      "icon": "gradient-red",
+      "tags": ["PPT", "备课", "设计"],
+      "url": "/apps/ppt",
+      "status": "new",
+      "featured": false,
+      "group": "resources",
+      "usage": 0,
+      "order": 13
+    },
+    {
+      "id": "lesson-plan",
+      "name": "智能教案设计",
+      "description": "AI 辅助生成结构化教案内容",
+      "icon": "gradient-teal",
+      "tags": ["教案", "备课", "AI"],
+      "url": "/apps/lesson-plan",
+      "status": "new",
+      "featured": false,
+      "group": "teaching-flow",
+      "usage": 0,
+      "order": 14
+    },
+    {
+      "id": "student-stats",
+      "name": "学生成绩统计",
+      "description": "作业提交情况与成绩数据可视化",
+      "icon": "gradient-indigo",
+      "tags": ["统计", "数据", "成绩"],
+      "url": "/apps/student-stats",
+      "status": "new",
+      "featured": false,
+      "group": "analytics",
+      "usage": 0,
+      "order": 15
+    }
+  ]
+}
