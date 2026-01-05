@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useAuth } from '@/composables/useAuth'
 
@@ -22,6 +22,21 @@ const zipUrl = ref('')
 const error = ref('')
 const history = ref<HistoryItem[]>([])
 let timer: number | null = null
+
+const currentPage = ref(1)
+const pages = computed(() => {
+  if (!result.value) return []
+  return result.value.split('<!-- PAGE_BREAK -->')
+})
+const totalPages = computed(() => pages.value.length)
+const currentContent = computed(() => {
+  if (pages.value.length === 0) return result.value || '' // Fallback if no break
+  return pages.value[currentPage.value - 1] || ''
+})
+
+watch(result, () => {
+  currentPage.value = 1
+})
 
 const { isLoggedIn } = useAuth()
 
@@ -76,7 +91,7 @@ function renderMarkdown(md: string) {
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-slate-100 rounded text-sm">$1</code>')
     .replace(/\n- (.*)/g, '<ul class="list-disc list-inside"><li>$1</li></ul>')
-    .replace(/\$(.+?)\$/g, '<span class="font-mono text-primary">$1</span>')
+    .replace(/\$([^`]+?)\$/g, '<span class="font-mono text-primary">$1</span>')
     .replace(/\n\n/g, '<br/><br/>')
 
   return html
@@ -254,7 +269,7 @@ function viewHistory(item: HistoryItem) {
         </div>
       </div>
 
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 min-h-[320px]">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 min-h-[320px] flex flex-col">
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-semibold text-slate-800">解析结果预览</h3>
           <span class="text-xs px-2 py-1 rounded-full" :class="{
@@ -268,7 +283,7 @@ function viewHistory(item: HistoryItem) {
         </div>
 
         <div v-if="zipUrl" class="mb-3">
-          <div class="flex gap-3">
+          <div class="flex flex-wrap gap-3">
             <a :href="zipUrl" target="_blank" rel="noopener" class="text-primary underline text-sm flex items-center gap-1">
               <Icon icon="mdi:folder-zip" class="w-4 h-4" />
               原始 ZIP
@@ -284,7 +299,30 @@ function viewHistory(item: HistoryItem) {
           </div>
         </div>
 
-        <div v-if="result" class="prose prose-sm max-w-none text-slate-800" v-html="renderMarkdown(result)" />
+        <!-- Pagination Controls -->
+        <div v-if="totalPages > 1" class="flex items-center justify-between mb-3 bg-slate-50 p-2 rounded-lg border border-slate-100">
+          <button 
+            class="p-1 rounded hover:bg-white hover:shadow-sm disabled:opacity-30 transition-all text-slate-600"
+            :disabled="currentPage <= 1"
+            @click="currentPage--"
+          >
+            <Icon icon="mdi:chevron-left" class="w-5 h-5" />
+          </button>
+          
+          <span class="text-xs font-medium text-slate-500">
+            Page {{ currentPage }} / {{ totalPages }}
+          </span>
+
+          <button 
+            class="p-1 rounded hover:bg-white hover:shadow-sm disabled:opacity-30 transition-all text-slate-600"
+            :disabled="currentPage >= totalPages"
+            @click="currentPage++"
+          >
+            <Icon icon="mdi:chevron-right" class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div v-if="result" class="prose prose-sm max-w-none text-slate-800 flex-1 overflow-y-auto" v-html="renderMarkdown(currentContent)" />
         <div v-else class="h-full flex items-center justify-center text-slate-400 text-sm">
           等待解析结果...
         </div>

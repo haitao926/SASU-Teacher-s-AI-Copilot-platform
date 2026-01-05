@@ -44,18 +44,25 @@ function createMockResult(fileName: string) {
 
 > 以下为 MinerU 模拟结果。接入真实服务后将自动替换。
 
-## 1. 公式示例
+## 第 1 页：基础公式
 $E = mc^2$
 
-## 2. 列表示例
-- 题目：已知直角三角形 ABC，求角 A。
-- 解题思路：使用正弦定理，结合已知边长推导角度。
+已知直角三角形 ABC，求角 A。
+解题思路：使用正弦定理，结合已知边长推导角度。
 
-## 3. 表格示例
+<!-- PAGE_BREAK -->
+
+## 第 2 页：表格数据
 | 章节 | 知识点 | 备注 |
 | ---- | ------ | ---- |
 | 1    | 函数概念 | 需强化练习 |
 | 2    | 导数应用 | 关注题型多样性 |
+
+<!-- PAGE_BREAK -->
+
+## 第 3 页：综合分析
+根据上述数据，建议加强对 **导数** 章节的复习。
+此处展示跨页内容的连续性测试。
 `
 }
 
@@ -314,15 +321,43 @@ export default async function registerOcrRoutes(app: FastifyInstance) {
           if (state.status !== 'done') {
             return reply.code(202).send(state)
           }
+
+          let markdownContent = ''
+          const fullZipUrl = state.fullZipUrl
+
+          // Try to fetch markdown content if zip is available
+          if (fullZipUrl) {
+             try {
+               // Check if we already have it cached in DB (not implemented in this simple version, so we fetch every time or rely on client caching)
+               // In a real app, we should cache the extracted text in the database.
+               const zipRes = await fetch(fullZipUrl)
+               if (zipRes.ok) {
+                 const buffer = Buffer.from(await zipRes.arrayBuffer())
+                 const zip = new AdmZip(buffer)
+                 const entries = zip.getEntries()
+                 // MinerU typically outputs 'output.md' or similar. We look for the first .md file.
+                 const mdEntry = entries.find(e => e.entryName.endsWith('.md') && !e.entryName.startsWith('__MACOSX'))
+                 if (mdEntry) {
+                   markdownContent = mdEntry.getData().toString('utf8')
+                 }
+               }
+             } catch (e) {
+               request.log.warn({ err: e }, 'Failed to extract markdown from zip')
+             }
+          }
+
           await updateOcrTask({
             id: state.taskId,
             status: state.status,
-            fullZipUrl: state.fullZipUrl ?? undefined
+            fullZipUrl: state.fullZipUrl ?? undefined,
+            result: markdownContent || undefined // Update DB
           }).catch(() => {})
+
           return {
             taskId: state.taskId,
             status: state.status,
             fullZipUrl: state.fullZipUrl,
+            result: markdownContent,
             error: state.error
           }
         } catch (err: any) {
