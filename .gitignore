@@ -36,3 +36,9 @@ Thumbs.db
 
 # Local tooling
 .claude/
+.local-cache/
+**/.local-cache/
+.npm-cache/
+**/.npm-cache/
+bff/src/generated/
+bff/prisma/*.db

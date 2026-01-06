@@ -1,0 +1,265 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  username      String   @unique
+  password      String   // Hashed password
+  name          String
+  role          String   @default("TEACHER") // ADMIN, TEACHER
+  createdAt     DateTime @default(now())
+  announcements Announcement[]
+  assets        Asset[]
+  ownedTools    Tool[]   @relation("ToolOwner")
+}
+
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  tag       String?
+  tagType   String   @default("info") // success, warning, info, danger
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id])
+}
+
+// --- Core Plugin System ---
+
+model Tool {
+  id          String       @id @default(uuid())
+  tenantId    String       @default("default")
+  code        String       // e.g., "ocr-tool", "chat-bot"
+  name        String
+  description String?
+  icon        String
+  route       String       // Frontend route e.g., "/apps/ocr"
+  category    String       // "efficiency", "content", "analysis"
+  tags        String?      // JSON string array, e.g. ["AI","图形"]
+  status      String       @default("ACTIVE") // DRAFT, ACTIVE, MAINTENANCE, DEPRECATED
+  isEnabled   Boolean      @default(true)
+  order       Int          @default(0)
+  deletedAt   DateTime?
+
+  ownerId     String?
+  owner       User?        @relation("ToolOwner", fields: [ownerId], references: [id])
+  assets      Asset[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, route])
+  @@index([tenantId, category])
+  @@index([tenantId, status])
+}
+
+model Asset {
+  id          String           @id @default(uuid())
+  tenantId    String           @default("default")
+  title       String
+  summary     String?
+
+  // Polymorphic content storage
+  content     String?          // Mermaid code, JSON, markdown...
+  contentUrl  String?          // For large binaries (image/video/etc)
+  metadata    String?          // JSON string: {size:1234,mime:"image/png"}
+  type        String           // mermaid, image, quiz-json, markdown, text, audio, video, file
+  tags        String?          // JSON string array
+  version     Int              @default(1)
+  
+  // Relationships
+  authorId    String
+  author      User             @relation(fields: [authorId], references: [id])
+  
+  toolId      String?
+  tool        Tool?            @relation(fields: [toolId], references: [id])
+  
+  visibility  String           @default("PRIVATE") // PRIVATE, INTERNAL, PUBLIC
+  deletedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([tenantId, type])
+  @@index([tenantId, visibility])
+  @@index([tenantId, authorId])
+  @@index([tenantId, toolId])
+}
+
+// --- Academic Module ---
+
+model Student {
+  id        String   @id @default(uuid())
+  tenantId  String   @default("default")
+  name      String
+  studentId String   // 学号
+  class     String   // 班级 e.g. "701"
+  scores    Score[]
+  submissions Submission[]
+
+  @@unique([tenantId, studentId])
+  @@index([tenantId, class])
+}
+
+model Exam {
+  id        String   @id @default(uuid())
+  tenantId  String   @default("default")
+  name      String   // e.g. "2025-2026 First Term Final"
+  date      DateTime
+  type      String   // Midterm, Final, Quiz
+  scores    Score[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, date])
+}
+
+model Score {
+  id        String   @id @default(uuid())
+  tenantId  String   @default("default")
+  value     Float
+  subject   String   // Math, English...
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id])
+  
+  // Security: Track who last touched this record
+  updatedBy String?  
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, examId])
+  @@index([tenantId, studentId])
+  @@index([tenantId, subject])
+}
+
+// --- Grading / Assignments ---
+model Assignment {
+  id         String   @id @default(uuid())
+  tenantId   String   @default("default")
+  name       String
+  subject    String
+  description String?
+  totalPoints Float    @default(0)
+  status     String   @default("DRAFT") // DRAFT, ACTIVE, CLOSED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  answerKeys AnswerKey[]
+  submissions Submission[]
+
+  @@index([tenantId, subject])
+  @@index([tenantId, status])
+}
+
+model AnswerKey {
+  id           String   @id @default(uuid())
+  tenantId     String   @default("default")
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  questionId   String
+  questionType String   // single, multi, fill, short, essay
+  content      String   // JSON string for options/answers
+  points       Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, assignmentId, questionId])
+}
+
+model Submission {
+  id           String   @id @default(uuid())
+  tenantId     String   @default("default")
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  studentId    String
+  student      Student  @relation(fields: [studentId], references: [id])
+  status       String   @default("PENDING") // PENDING, PROCESSING, DONE, ERROR
+  totalScore   Float    @default(0)
+  payloadUrl   String?  // original scan url
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  grading      GradingResult?
+
+  @@index([tenantId, assignmentId])
+  @@index([tenantId, studentId])
+  @@index([tenantId, status])
+}
+
+model GradingResult {
+  id            String   @id @default(uuid())
+  tenantId      String   @default("default")
+  submissionId  String   @unique
+  submission    Submission @relation(fields: [submissionId], references: [id])
+  objectiveScore Float   @default(0)
+  subjectiveScore Float  @default(0)
+  totalScore     Float   @default(0)
+  details        String? // JSON string with per-question scores
+  reviewedBy     String?
+  updatedAt      DateTime @updatedAt
+}
+
+// --- Security Module ---
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  operatorId String   // User ID of the teacher/admin
+  action     String   // CREATE, UPDATE, DELETE, EXPORT
+  resource   String   // "Score", "Student"
+  resourceId String?  // The ID of the affected record
+  
+  // Critical: Store what changed. 
+  // e.g. "Changed Score from 85 to 95"
+  details    String   // JSON string containing diff
+  
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+}
+
+// --- Portal Entries (for dynamic config) ---
+model Group {
+  id        String   @id @default(uuid())
+  name      String
+  icon      String
+  order     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  entries   Entry[]
+}
+
+model Entry {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  icon        String
+  url         String
+  status      String   // available, maintenance, new
+  featured    Boolean  @default(false)
+  order       Int
+  usage       Int      @default(0)
+  tags        String?
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// --- OCR Task Tracking ---
+model OcrTask {
+  id         String   @id @default(uuid())
+  userId     String
+  fileName   String
+  status     String   // queued, processing, done, error
+  source     String   // mock | mineru
+  fullZipUrl String?
+  result     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

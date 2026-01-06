@@ -20,6 +20,12 @@ const menuItems = [
     name: 'admin-announcements'
   },
   {
+    path: '/admin/users',
+    icon: 'mdi:account-group',
+    label: '用户管理',
+    name: 'admin-users'
+  },
+  {
     path: '/admin/groups',
     icon: 'mdi:folder',
     label: '分组管理',

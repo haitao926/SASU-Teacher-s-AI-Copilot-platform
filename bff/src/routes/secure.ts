@@ -12,7 +12,16 @@ export default async function registerSecureRoutes(app: FastifyInstance) {
           200: {
             type: 'object',
             properties: {
-              user: { type: 'object' }
+              user: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  username: { type: 'string' },
+                  role: { type: 'string' },
+                  roles: { type: 'array', items: { type: 'string' } }
+                }
+              }
             }
           },
           401: {
@@ -25,8 +34,17 @@ export default async function registerSecureRoutes(app: FastifyInstance) {
         }
       }
     },
-    async (request) => ({
-      user: request.user ?? {}
-    })
+    async (request) => {
+      const u = request.user as Record<string, any> | undefined
+      return {
+        user: {
+          id: u?.sub ?? '',
+          name: u?.name ?? '教师',
+          username: u?.username ?? '',
+          role: u?.role ?? (Array.isArray(u?.roles) ? u?.roles[0] : undefined) ?? 'TEACHER',
+          roles: Array.isArray(u?.roles) ? u?.roles : []
+        }
+      }
+    }
   )
 }

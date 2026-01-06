@@ -29,56 +29,64 @@ function selectAll() {
 
 <template>
   <aside
-    class="app-sidebar fixed left-0 top-16 bottom-0 bg-white border-r border-gray-200 transition-all duration-300 z-40"
-    :class="collapsed ? 'w-16' : 'w-64'"
+    class="app-sidebar fixed left-0 top-16 bottom-0 bg-white/50 backdrop-blur-md transition-all duration-300 z-40 flex flex-col pt-4"
+    :class="collapsed ? 'w-20' : 'w-64'"
   >
-    <div class="h-full flex flex-col">
-      <!-- 折叠按钮 -->
+    <!-- 导航列表 -->
+    <nav class="flex-1 overflow-y-auto px-4 space-y-1">
+      <!-- 常用应用 (原全部应用) -->
       <button
-        class="flex items-center justify-center h-12 border-b border-gray-100 hover:bg-gray-50 transition-colors"
+        class="w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all group relative"
+        :class="
+          selectedGroup === null
+            ? 'bg-amber-50 text-amber-900 shadow-sm ring-1 ring-amber-100'
+            : 'text-slate-500 hover:bg-slate-50'
+        "
+        @click="selectAll"
+      >
+        <Icon 
+          :icon="selectedGroup === null ? 'mdi:star' : 'mdi:star-outline'" 
+          class="w-5 h-5 flex-shrink-0 transition-colors"
+          :class="selectedGroup === null ? 'text-amber-500' : 'text-slate-400 group-hover:text-amber-400'"
+        />
+        <span v-if="!collapsed" class="text-sm font-bold truncate">常用应用</span>
+      </button>
+
+      <!-- 分组列表 -->
+      <button
+        v-for="group in groups"
+        :key="group.id"
+        class="w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all group"
+        :class="
+          selectedGroup === group.id
+            ? 'bg-white text-primary shadow-md ring-1 ring-black/5'
+            : 'text-slate-500 hover:bg-slate-100'
+        "
+        :title="collapsed ? group.name : undefined"
+        @click="selectGroup(group.id)"
+      >
+        <Icon 
+          :icon="group.icon" 
+          class="w-6 h-6 flex-shrink-0 transition-colors"
+          :class="selectedGroup === group.id ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'"
+        />
+        <span v-if="!collapsed" class="text-sm font-medium truncate">
+          {{ group.name }}
+        </span>
+      </button>
+    </nav>
+
+    <!-- 底部折叠按钮 -->
+    <div class="p-4 border-t border-slate-100/50">
+      <button
+        class="w-full flex items-center justify-center h-10 rounded-xl hover:bg-slate-100 text-slate-400 transition-colors"
         @click="toggleCollapse"
       >
         <Icon
           :icon="collapsed ? 'mdi:chevron-right' : 'mdi:chevron-left'"
-          class="w-5 h-5 text-gray-600"
+          class="w-5 h-5"
         />
       </button>
-
-      <!-- 导航列表 -->
-      <nav class="flex-1 overflow-y-auto p-2">
-        <!-- 全部分类 -->
-        <button
-          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all mb-1 group"
-          :class="
-            selectedGroup === null
-              ? 'bg-primary text-white'
-              : 'hover:bg-gray-100 text-gray-700'
-          "
-          @click="selectAll"
-        >
-          <Icon icon="mdi:view-grid" class="w-5 h-5 flex-shrink-0" />
-          <span v-if="!collapsed" class="text-sm font-medium truncate">全部应用</span>
-        </button>
-
-        <!-- 分组列表 -->
-        <button
-          v-for="group in groups"
-          :key="group.id"
-          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all mb-1 group"
-          :class="
-            selectedGroup === group.id
-              ? 'bg-primary text-white'
-              : 'hover:bg-gray-100 text-gray-700'
-          "
-          :title="collapsed ? group.name : undefined"
-          @click="selectGroup(group.id)"
-        >
-          <Icon :icon="group.icon" class="w-5 h-5 flex-shrink-0" />
-          <span v-if="!collapsed" class="text-sm font-medium truncate">
-            {{ group.name }}
-          </span>
-        </button>
-      </nav>
     </div>
   </aside>
 </template>

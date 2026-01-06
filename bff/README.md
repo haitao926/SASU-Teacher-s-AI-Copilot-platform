@@ -41,6 +41,15 @@ npm run export:openapi
 - **SSE/流式**：示例路由 `/stream/demo` 展示 BFF 层转发流式响应的基本写法。
 - **OpenAPI**：`@fastify/swagger` + `@fastify/swagger-ui` 自动暴露接口文档，便于生成前端 SDK。
 - **请求追踪**：在 `onRequest` 注入 `x-request-id`，回传到响应头，便于日志关联。
+- **账号安全**：种子账号使用 `scrypt` 哈希存储密码；生产环境必须设置强 `JWT_SECRET`（非 `dev-secret-change-me`），管理员专属接口增加了 RBAC 校验。
+
+## 数据导入（学生名册）
+使用 `StudentsToExcel2026-1-6.xls`（实际为 UTF-8 制表符分隔文本）导入学生基础信息：
+```bash
+cd bff
+npm run import:students -- --file ../StudentsToExcel2026-1-6.xls --tenant default
+```
+支持 `--dry-run` 预览，必需列：学号、姓名；班级将映射为 `年级-班级` 形式写入 `student.class`。
 
 ## 后续扩展建议
 - 接入 OIDC/JWKS：替换 `JWT_SECRET` 为 JWKS 签名验证，并校验 `aud/iss/exp`。

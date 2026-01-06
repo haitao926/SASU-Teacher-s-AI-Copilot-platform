@@ -2,14 +2,16 @@
 import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { EntryCard, Group } from '@/types'
+import { useAuth } from '@/composables/useAuth'
 
-// 模拟数据加载
 const entries = ref<EntryCard[]>([])
 const groups = ref<Group[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const currentEntry = ref<EntryCard | null>(null)
 const isEditing = ref(false)
+const saving = ref(false)
+const { isAdmin } = useAuth()
 
 // 表单数据
 const formData = ref<Partial<EntryCard>>({
@@ -28,20 +30,23 @@ const formData = ref<Partial<EntryCard>>({
 
 const tagInput = ref('')
 
-// 加载数据
+// 加载数据（使用后端 API）
 async function loadData() {
   loading.value = true
   try {
-    const [entriesRes, groupsRes] = await Promise.all([
-      fetch('/config/entries.json'),
-      fetch('/config/entries.json')
-    ])
-    const entriesData = await entriesRes.json()
-    const groupsData = await groupsRes.json()
-    entries.value = entriesData.entries || []
-    groups.value = groupsData.groups || []
+    const res = await fetch('/api/entries/config')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    groups.value = data.groups || []
+    entries.value = (data.entries || []).map((e: any) => ({
+      ...e,
+      group: e.group ?? e.groupId ?? '',
+      tags: e.tags ?? [],
+      usage: e.usage ?? 0
+    }))
   } catch (error) {
     console.error('加载数据失败:', error)
+    alert('加载数据失败，请检查登录状态或后端服务')
   } finally {
     loading.value = false
   }
@@ -66,7 +71,7 @@ function openAddDialog() {
   isEditing.value = false
   currentEntry.value = null
   formData.value = {
-    id: `entry-${Date.now()}`,
+    id: '',
     name: '',
     description: '',
     icon: 'gradient-blue',
@@ -90,34 +95,76 @@ function openEditDialog(entry: EntryCard) {
 }
 
 // 保存
-function handleSave() {
+async function handleSave() {
   if (!formData.value.name || !formData.value.url) {
     alert('请填写必填项')
     return
   }
 
-  if (isEditing.value && currentEntry.value) {
-    // 编辑
-    const index = entries.value.findIndex(e => e.id === currentEntry.value!.id)
-    if (index !== -1) {
-      entries.value[index] = formData.value as EntryCard
-    }
-  } else {
-    // 新增
-    entries.value.push(formData.value as EntryCard)
+  if (!isAdmin.value) {
+    alert('仅管理员可保存入口配置')
+    return
   }
 
-  dialogVisible.value = false
-  saveToFile()
+  saving.value = true
+  try {
+    const payload = {
+      name: formData.value.name,
+      description: formData.value.description || '',
+      icon: formData.value.icon || 'gradient-blue',
+      url: formData.value.url,
+      status: formData.value.status || 'available',
+      featured: !!formData.value.featured,
+      order: formData.value.order ?? 0,
+      group: formData.value.group || '',
+      tags: formData.value.tags || [],
+      usage: formData.value.usage ?? 0
+    }
+
+    const isEdit = isEditing.value && currentEntry.value
+    const endpoint = isEdit ? `/api/admin/entries/${currentEntry.value!.id}` : '/api/admin/entries'
+    const method = isEdit ? 'PUT' : 'POST'
+
+    const res = await fetch(endpoint, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.message || '保存失败')
+    }
+
+    await loadData()
+    dialogVisible.value = false
+    alert('保存成功')
+  } catch (error: any) {
+    console.error('保存失败', error)
+    alert(error.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
 }
 
 // 删除
-function handleDelete(entry: EntryCard) {
+async function handleDelete(entry: EntryCard) {
   if (confirm(`确定删除"${entry.name}"吗？`)) {
-    const index = entries.value.findIndex(e => e.id === entry.id)
-    if (index !== -1) {
-      entries.value.splice(index, 1)
-      saveToFile()
+    if (!isAdmin.value) {
+      alert('仅管理员可删除入口配置')
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/admin/entries/${entry.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.message || '删除失败')
+      }
+      await loadData()
+    } catch (error: any) {
+      console.error('删除失败', error)
+      alert(error.message || '删除失败')
     }
   }
 }
@@ -136,17 +183,6 @@ function removeTag(tag: string) {
   if (formData.value.tags) {
     formData.value.tags = formData.value.tags.filter(t => t !== tag)
   }
-}
-
-// 保存到文件（模拟）
-function saveToFile() {
-  const data = {
-    groups: groups.value,
-    entries: entries.value
-  }
-  console.log('保存数据:', data)
-  alert('保存成功！\n\n注意：实际项目中需要调用后端 API 保存数据。\n当前数据已打印到控制台，可复制到 public/config/entries.json')
-  console.log(JSON.stringify(data, null, 2))
 }
 
 // 导出配置

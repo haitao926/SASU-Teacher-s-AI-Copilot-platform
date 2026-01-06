@@ -4,6 +4,9 @@ import config from '../config'
 interface MockAuthBody {
   sub?: string
   roles?: string[]
+  name?: string
+  username?: string
+  role?: string
 }
 
 export default async function registerMockAuth(app: FastifyInstance) {
@@ -22,7 +25,10 @@ export default async function registerMockAuth(app: FastifyInstance) {
           type: 'object',
           properties: {
             sub: { type: 'string', description: 'subject / user id' },
-            roles: { type: 'array', items: { type: 'string' } }
+            roles: { type: 'array', items: { type: 'string' } },
+            name: { type: 'string' },
+            username: { type: 'string' },
+            role: { type: 'string' }
           },
           additionalProperties: false
         },
@@ -30,19 +36,43 @@ export default async function registerMockAuth(app: FastifyInstance) {
           200: {
             type: 'object',
             properties: {
-              token: { type: 'string' }
+              token: { type: 'string' },
+              user: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  username: { type: 'string' },
+                  name: { type: 'string' },
+                  role: { type: 'string' }
+                }
+              }
             }
           }
         }
       }
     },
     async (request) => {
-      const { sub = 'demo-user', roles = ['teacher'] } = request.body ?? {}
+      const {
+        sub = 'teacher-001',
+        roles = ['TEACHER'],
+        name = '示例教师',
+        username = 'teacher@example.com',
+        role
+      } = request.body ?? {}
+
       const token = app.jwt.sign(
-        { sub, roles },
+        { sub, roles, name, username, role: role ?? roles[0] },
         { expiresIn: '1h' }
       )
-      return { token }
+      return {
+        token,
+        user: {
+          id: sub,
+          username,
+          name,
+          role: role ?? roles[0] ?? 'TEACHER'
+        }
+      }
     }
   )
 }

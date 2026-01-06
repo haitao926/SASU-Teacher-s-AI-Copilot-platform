@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { useStorage } from '@vueuse/core'
 import type { EntryCard, Group, SortOption } from '@/types'
 import { loadEntriesConfig } from '@/utils/config'
 
@@ -6,6 +7,9 @@ const groups = ref<Group[]>([])
 const entries = ref<EntryCard[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
+
+// 持久化存储收藏的应用 ID
+const favoriteIds = useStorage<string[]>('iai-favorites', [])
 
 export function useEntries() {
   // 加载配置
@@ -23,6 +27,25 @@ export function useEntries() {
       loading.value = false
     }
   }
+
+  // 收藏相关逻辑
+  function toggleFavorite(id: string) {
+    const index = favoriteIds.value.indexOf(id)
+    if (index === -1) {
+      favoriteIds.value.push(id)
+    } else {
+      favoriteIds.value.splice(index, 1)
+    }
+  }
+
+  function isFavorite(id: string): boolean {
+    return favoriteIds.value.includes(id)
+  }
+
+  // 获取已收藏的应用列表
+  const favoriteEntries = computed(() => {
+    return entries.value.filter(entry => favoriteIds.value.includes(entry.id))
+  })
 
   // 根据分组获取入口
   function getEntriesByGroup(groupId: string): EntryCard[] {
@@ -66,8 +89,9 @@ export function useEntries() {
     const entry = entries.value.find(e => e.id === entryId)
     if (entry) {
       entry.usage++
-      // 可以在这里添加埋点统计逻辑
-      console.log(`Entry clicked: ${entry.name}, usage: ${entry.usage}`)
+      fetch(`/api/entries/${entryId}/click`, { method: 'POST' }).catch(() => {
+        // 忽略埋点失败，保持前端体验
+      })
     }
   }
 
@@ -77,6 +101,9 @@ export function useEntries() {
     loading,
     error,
     featuredEntries,
+    favoriteEntries, // 导出
+    isFavorite,      // 导出
+    toggleFavorite,  // 导出
     loadConfig,
     getEntriesByGroup,
     getEntriesByStatus,

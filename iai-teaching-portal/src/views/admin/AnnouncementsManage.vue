@@ -2,7 +2,9 @@
 import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { Announcement } from '@/types'
+import { useAuth } from '@/composables/useAuth'
 
+const { token } = useAuth()
 const announcements = ref<Announcement[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
@@ -10,23 +12,24 @@ const currentItem = ref<Announcement | null>(null)
 const isEditing = ref(false)
 
 const formData = ref<Partial<Announcement>>({
-  id: '',
   title: '',
   content: '',
-  time: '',
   tag: '通知',
   tagType: 'info',
-  pinned: false,
-  read: false
+  pinned: false
 })
 
 // 加载数据
 async function loadData() {
   loading.value = true
   try {
-    const res = await fetch('/config/announcements.json')
-    const data = await res.json()
-    announcements.value = data.announcements || []
+    const res = await fetch('/api/announcements')
+    if (res.ok) {
+      const data = await res.json()
+      announcements.value = data
+    } else {
+       console.error('API Error')
+    }
   } catch (error) {
     console.error('加载数据失败:', error)
   } finally {
@@ -52,77 +55,74 @@ function openAddDialog() {
   isEditing.value = false
   currentItem.value = null
   formData.value = {
-    id: `ann-${Date.now()}`,
     title: '',
     content: '',
-    time: new Date().toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).replace(/\//g, '-'),
     tag: '通知',
     tagType: 'info',
-    pinned: false,
-    read: false
+    pinned: false
   }
   dialogVisible.value = true
 }
 
-// 打开编辑对话框
-function openEditDialog(item: Announcement) {
-  isEditing.value = true
-  currentItem.value = item
-  formData.value = { ...item }
-  dialogVisible.value = true
+// 打开编辑对话框 (暂不支持后端编辑)
+function openEditDialog(_item: Announcement) {
+  alert('当前版本暂不支持编辑功能，请删除后重新创建。')
+  // isEditing.value = true
+  // currentItem.value = item
+  // formData.value = { ...item }
+  // dialogVisible.value = true
 }
 
 // 保存
-function handleSave() {
+async function handleSave() {
   if (!formData.value.title || !formData.value.content) {
     alert('请填写必填项')
     return
   }
 
-  if (isEditing.value && currentItem.value) {
-    // 编辑
-    const index = announcements.value.findIndex(a => a.id === currentItem.value!.id)
-    if (index !== -1) {
-      announcements.value[index] = formData.value as Announcement
-    }
-  } else {
-    // 新增
-    announcements.value.unshift(formData.value as Announcement)
-  }
+  try {
+    const res = await fetch('/api/announcements', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.value}`
+      },
+      body: JSON.stringify(formData.value)
+    })
 
-  dialogVisible.value = false
-  saveToFile()
+    if (!res.ok) throw new Error('Failed to create')
+    
+    await loadData() // Reload list
+    dialogVisible.value = false
+  } catch (e) {
+    alert('保存失败')
+    console.error(e)
+  }
 }
 
 // 删除
-function handleDelete(item: Announcement) {
+async function handleDelete(item: Announcement) {
   if (confirm(`确定删除"${item.title}"吗？`)) {
-    const index = announcements.value.findIndex(a => a.id === item.id)
-    if (index !== -1) {
-      announcements.value.splice(index, 1)
-      saveToFile()
+    try {
+      const res = await fetch(`/api/announcements/${item.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token.value}`
+        }
+      })
+      if (!res.ok) throw new Error('Failed to delete')
+      await loadData()
+    } catch (e) {
+      alert('删除失败')
     }
   }
 }
 
-// 切换置顶
-function togglePin(item: Announcement) {
-  item.pinned = !item.pinned
-  saveToFile()
-}
-
-// 保存到文件（模拟）
-function saveToFile() {
-  const data = { announcements: announcements.value }
-  console.log('保存数据:', data)
-  alert('保存成功！\n\n注意：实际项目中需要调用后端 API 保存数据。\n当前数据已打印到控制台，可复制到 public/config/announcements.json')
-  console.log(JSON.stringify(data, null, 2))
+// 切换置顶 (暂不支持)
+function togglePin(_item: Announcement) {
+  // item.pinned = !item.pinned
+  // API call needed
+  alert('暂不支持快捷修改置顶状态')
 }
 
 // 导出配置

@@ -3,37 +3,37 @@
     {
       "id": "teaching-flow",
       "name": "教学流程",
-      "icon": "mdi:school",
+      "icon": "teaching",
       "order": 1
     },
     {
       "id": "classroom-tools",
       "name": "课堂工具",
-      "icon": "mdi:presentation",
+      "icon": "tools",
       "order": 2
     },
     {
       "id": "resources",
       "name": "备课/资源",
-      "icon": "mdi:book-open-variant",
+      "icon": "resources",
       "order": 3
     },
     {
       "id": "assessment",
       "name": "测评/批改",
-      "icon": "mdi:clipboard-check",
+      "icon": "assessment",
       "order": 4
     },
     {
       "id": "analytics",
       "name": "数据分析",
-      "icon": "mdi:chart-line",
+      "icon": "analysis",
       "order": 5
     },
     {
       "id": "communication",
       "name": "通知/沟通",
-      "icon": "mdi:bell",
+      "icon": "communication",
       "order": 6
     }
   ],
@@ -42,7 +42,7 @@
       "id": "ai-grading",
       "name": "AI 作业批改",
       "description": "上传作业批量评分，自动生成讲评建议与错误分析",
-      "icon": "gradient-purple",
+      "icon": "/vite.svg",
       "tags": ["AI批改", "自动评分", "测评"],
       "url": "https://grading.example.com?source=iai-portal",
       "status": "available",
@@ -55,7 +55,7 @@
       "id": "lesson-plan-assistant",
       "name": "智能备课助手",
       "description": "根据教学大纲快速生成教案框架，推荐教学资源",
-      "icon": "gradient-blue",
+      "icon": "/vite.svg",
       "tags": ["备课", "教案生成", "AI辅助"],
       "url": "https://lesson.example.com?source=iai-portal",
       "status": "available",
@@ -226,12 +226,38 @@
       "description": "作业提交情况与成绩数据可视化",
       "icon": "gradient-indigo",
       "tags": ["统计", "数据", "成绩"],
-      "url": "/apps/student-stats",
+      "url": "http://localhost:5174",
       "status": "new",
       "featured": false,
       "group": "analytics",
       "usage": 0,
       "order": 15
+    },
+    {
+      "id": "quiz-grading",
+      "name": "智能阅卷",
+      "description": "上传答案/试卷，自动判分，导出成绩",
+      "icon": "gradient-blue",
+      "tags": ["阅卷", "批改"],
+      "url": "http://localhost:5175",
+      "status": "new",
+      "featured": true,
+      "group": "assessment",
+      "usage": 0,
+      "order": 16
+    },
+    {
+      "id": "quiz-builder",
+      "name": "智能组卷",
+      "description": "按知识点/难度生成试卷，支持编辑导出",
+      "icon": "gradient-purple",
+      "tags": ["组卷", "试卷"],
+      "url": "http://localhost:5176",
+      "status": "new",
+      "featured": false,
+      "group": "assessment",
+      "usage": 0,
+      "order": 17
     }
   ]
 }

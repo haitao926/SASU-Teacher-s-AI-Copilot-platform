@@ -22,13 +22,18 @@
 
 ### 3. 学生学情统计 (Student Stats)
 *状态: 🟡 独立应用，待集成*
-- [ ] **无缝跳转**: 点击门户卡片时，自动携带 Token 跳转至统计子系统，免去二次登录。
-- [ ] **UI 统一**: 调整 `iai-student-stats` 的顶部导航栏，使其与主门户视觉风格一致（ReOpenInnoLab 品牌）。
+- [ ] **无缝跳转/SSO**: 门户卡片跳转 student-stats 时携带 JWT/租户，免二次登录。
+- [x] **入口配置**: Portal 首页卡片指向 `/apps/student-stats`，并支持配置 `VITE_STATS_APP_URL` 跳转上传端。
+- [ ] **上传体验**: student-stats 增加模板下载、上传成功/失败提示与错误行反馈，限制批量大小。
+- [x] **导出报表**: BFF `/api/academic/scores/export?format=csv|pdf`，Portal 内置导出按钮（CSV/PDF）。
+- [ ] **概览/趋势**: Portal `/apps/student-stats` 显示考试+班级概览；student-stats 待补充成绩列表、筛选和趋势图。
+- [ ] **UI 统一**: 调整 `apps/student-stats` 顶部导航/配色以匹配 Portal 品牌。
 
 ### 4. 更多工具 (More Tools)
-*状态: ⚪️ 规划中*
-- [ ] **智能组卷 (`/apps/quiz-builder`)**: 接入题库 API，根据知识点生成试卷 Markdown。
-- [ ] **PPT 大纲 (`/apps/ppt`)**: 输入主题 -> 生成 Markdown 大纲 -> 导出为 Marp/Slidev 格式。
+*状态: ⚪️ 规划中（优先智能阅卷，其次组卷，PPT 暂缓）*
+- [ ] **智能阅卷/批改 (`/apps/quiz-grading`)**: 后端已提供作业/答案/提交/导出 CSV 的 MVP；待接入 OCR+LLM、人工复核、AuditLog、Portal 前端与 PDF 导出。
+- [ ] **智能组卷 (`/apps/quiz-builder`)**: 后端提供 mock 生成接口；待对接题库 API、草稿保存、导出 MD/Word/PDF、Portal 前端交互。
+- [ ] **PPT 大纲 (`/apps/ppt`)**: 输入主题 -> 生成 Markdown 大纲；支持版式模板选择、图片占位符、导出 Marp/Slidev；允许二次编辑与版本保存。
 
 ---
 

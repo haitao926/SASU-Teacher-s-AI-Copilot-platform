@@ -1,10 +1,11 @@
+
 import { randomUUID } from 'crypto'
 import type { FastifyInstance } from 'fastify'
 import AdmZip from 'adm-zip'
 import config from '../config'
+import prisma from '../utils/prisma'
 import {
   applyUploadUrl,
-  createTask,
   generateDataId,
   getTaskState,
   mineruEnabled,
@@ -22,6 +23,14 @@ interface UploadBody {
   fileName: string
   contentBase64: string
   mimeType?: string
+  scene?: 'doc' | 'lens'
+}
+
+interface SaveAssetBody {
+  title: string
+  type: string
+  tags?: string[]
+  visibility?: 'PRIVATE' | 'PUBLIC'
 }
 
 interface OcrTask {
@@ -35,53 +44,35 @@ interface OcrTask {
   error?: string
   traceId?: string
   source: 'mock' | 'mineru'
+  scene?: 'doc' | 'lens'
 }
 
 const mockTasks = new Map<string, OcrTask>()
 
 function createMockResult(fileName: string) {
-  return `# 解析结果 - ${fileName}
-
-> 以下为 MinerU 模拟结果。接入真实服务后将自动替换。
-
-## 第 1 页：基础公式
-$E = mc^2$
-
-已知直角三角形 ABC，求角 A。
-解题思路：使用正弦定理，结合已知边长推导角度。
-
-<!-- PAGE_BREAK -->
-
-## 第 2 页：表格数据
-| 章节 | 知识点 | 备注 |
-| ---- | ------ | ---- |
-| 1    | 函数概念 | 需强化练习 |
-| 2    | 导数应用 | 关注题型多样性 |
-
-<!-- PAGE_BREAK -->
-
-## 第 3 页：综合分析
-根据上述数据，建议加强对 **导数** 章节的复习。
-此处展示跨页内容的连续性测试。
-`
+  return `# OCR 解析结果 (Mock)\n\n文件: ${fileName}\n\n## 1. 简介\n这是一份模拟文档，用于演示前端渲染效果。\n\n## 2. 公式测试\n我们可以解析数学公式，例如：\n$$E = mc^2$$\n\n## 3. 代码测试\n\`\`\`python\nprint("Hello World")\n\`\`\`\n\n- 提取时间: ${new Date().toISOString()}\n- 状态: 完成`
 }
 
 function scheduleMockProgress(taskId: string) {
   let progress = 10
+  const task = mockTasks.get(taskId)
+  const isLens = task?.scene === 'lens'
+  const intervalTime = isLens ? 200 : 700 
+
   const timer = setInterval(() => {
     progress += 20
-    const task = mockTasks.get(taskId)
-    if (!task) {
+    const currentTask = mockTasks.get(taskId)
+    if (!currentTask) {
       clearInterval(timer)
       return
     }
-    task.progress = Math.min(progress, 100)
-    task.status = task.progress >= 100 ? 'done' : 'processing'
-    if (task.status === 'done') {
-      task.result = task.result ?? createMockResult(task.fileName)
+    currentTask.progress = Math.min(progress, 100)
+    currentTask.status = currentTask.progress >= 100 ? 'done' : 'processing'
+    if (currentTask.status === 'done') {
+      currentTask.result = currentTask.result ?? createMockResult(currentTask.fileName)
       clearInterval(timer)
     }
-  }, 700)
+  }, intervalTime)
 }
 
 export default async function registerOcrRoutes(app: FastifyInstance) {
@@ -99,13 +90,14 @@ export default async function registerOcrRoutes(app: FastifyInstance) {
           properties: {
             fileName: { type: 'string' },
             contentBase64: { type: 'string' },
-            mimeType: { type: 'string' }
+            mimeType: { type: 'string' },
+            scene: { type: 'string', enum: ['doc', 'lens'] }
           }
         }
       }
     },
     async (request, reply) => {
-      const { fileName, contentBase64 } = request.body
+      const { fileName, contentBase64, scene = 'doc' } = request.body
       const user = request.user as Record<string, any> | undefined
       const userId = (user?.sub as string) || 'anonymous'
 
@@ -121,7 +113,8 @@ export default async function registerOcrRoutes(app: FastifyInstance) {
           fileName,
           status: 'queued',
           progress: 0,
-          source: 'mock'
+          source: 'mock',
+          scene
         }
         mockTasks.set(taskId, task)
         scheduleMockProgress(taskId)
@@ -136,14 +129,15 @@ export default async function registerOcrRoutes(app: FastifyInstance) {
         reply.code(202)
         return { taskId, status: task.status, source: task.source }
       }
-
-      // --- MinerU real flow (v4/file-urls/batch -> PUT upload -> extract/task) ---
+      
       try {
         const dataId = generateDataId()
         const uploadInfo = await applyUploadUrl(fileName, dataId)
-        await uploadToSignedUrl(uploadInfo.uploadUrl, toBuffer(contentBase64))
-        const taskInfo = await createTask(uploadInfo.uploadUrl, dataId)
-        const taskId = taskInfo.taskId
+        
+        await uploadToSignedUrl(uploadInfo.uploadUrl, toBuffer(contentBase64), request.body.mimeType)
+        
+        const taskId = uploadInfo.batchId
+        
         await createOcrTask({
           id: taskId,
           userId,
@@ -155,7 +149,7 @@ export default async function registerOcrRoutes(app: FastifyInstance) {
           taskId,
           status: 'processing',
           source: 'mineru',
-          requestId: taskInfo.traceId ?? uploadInfo.traceId
+          requestId: uploadInfo.traceId
         }
       } catch (err: any) {
         request.log.error({ err }, 'mineru upload/parse failed')
@@ -325,17 +319,13 @@ export default async function registerOcrRoutes(app: FastifyInstance) {
           let markdownContent = ''
           const fullZipUrl = state.fullZipUrl
 
-          // Try to fetch markdown content if zip is available
           if (fullZipUrl) {
              try {
-               // Check if we already have it cached in DB (not implemented in this simple version, so we fetch every time or rely on client caching)
-               // In a real app, we should cache the extracted text in the database.
                const zipRes = await fetch(fullZipUrl)
                if (zipRes.ok) {
                  const buffer = Buffer.from(await zipRes.arrayBuffer())
                  const zip = new AdmZip(buffer)
                  const entries = zip.getEntries()
-                 // MinerU typically outputs 'output.md' or similar. We look for the first .md file.
                  const mdEntry = entries.find(e => e.entryName.endsWith('.md') && !e.entryName.startsWith('__MACOSX'))
                  if (mdEntry) {
                    markdownContent = mdEntry.getData().toString('utf8')
@@ -425,6 +415,72 @@ export default async function registerOcrRoutes(app: FastifyInstance) {
         fullZipUrl: t.fullZipUrl,
         createdAt: t.createdAt.toISOString()
       }))
+    }
+  )
+
+  app.post<{ Params: { id: string }, Body: SaveAssetBody }>(
+    '/ocr/tasks/:id/save-asset',
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['ocr'],
+        summary: 'Save OCR result to Resource Library (Assets)',
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' }
+          }
+        },
+        body: {
+          type: 'object',
+          required: ['title', 'type'],
+          properties: {
+            title: { type: 'string' },
+            type: { type: 'string', description: 'e.g. quiz-json, markdown, courseware' },
+            tags: { type: 'array', items: { type: 'string' } },
+            visibility: { type: 'string', enum: ['PRIVATE', 'PUBLIC'] }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const { id } = request.params
+      const { title, type, tags, visibility = 'PRIVATE' } = request.body
+      const user = request.user as { sub: string }
+
+      let result = ''
+      let fullZipUrl: string | undefined = ''
+
+      if (mineruEnabled()) {
+        const task = await getOcrTask(id)
+        if (!task) return reply.code(404).send({ message: 'Task not found' })
+        result = task.result || ''
+        fullZipUrl = task.fullZipUrl || ''
+      } else {
+        const task = mockTasks.get(id)
+        if (!task) return reply.code(404).send({ message: 'Task not found' })
+        result = task.result || ''
+      }
+
+      if (!result) {
+        return reply.code(400).send({ message: 'OCR result is empty, cannot save.' })
+      }
+
+      const asset = await prisma.asset.create({
+        data: {
+          tenantId: 'default',
+          title,
+          type, 
+          content: result,
+          contentUrl: fullZipUrl || null,
+          tags: tags ? JSON.stringify(tags) : '[]',
+          visibility,
+          authorId: user.sub
+        }
+      })
+
+      return { success: true, assetId: asset.id }
     }
   )
 }
