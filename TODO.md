@@ -1,65 +1,74 @@
-# ReOpenInnoLab-智教空间 开发待办 (Product Roadmap)
+# ReOpenInnoLab-智教空间 Development Roadmap
 
-> **当前阶段**: V1.0 Prototype -> V2.0 MVP (Minimum Viable Product)
-> **核心目标**: 将门户中展示的“空壳”应用逐步替换为真实可用的 AI 微应用。
-
-## 🚀 核心应用交付 (Core Apps Delivery)
-
-### 1. 智能 OCR (Smart OCR)
-*状态: 🟡 原型完成，待生产化*
-- [x] **基础流程**: 文件上传 -> MinerU 解析 -> Markdown 预览。
-- [x] **结果导出**: 支持下载 Word (.docx) 和 PDF 格式（需后端处理 MinerU 返回的 ZIP）。
-- [x] **多页预览**: 优化前端预览组件，支持翻页查看 PDF 解析结果。
-- [x] **历史记录**: 用户可查看自己之前的解析任务记录（需数据库 `OcrTask` 表支持）。
-
-### 2. AI 教学助手 (AI Copilot)
-*状态: 🔴 仅有入口，待开发*
-- [x] **对话界面 (`/apps/chat`)**: 实现类似 ChatGPT 的分栏布局（左侧历史会话，右侧聊天框）。
-- [x] **流式响应**: 对接 BFF 的 SSE 接口 (`/api/stream/chat`)，实现打字机效果。
-- [x] **教学场景预设**:
-    - [x] **一键润色**: 输入粗糙指令，AI 自动优化为结构化 Prompt。
-    - [x] **教案生成**: 选择年级/学科/课题，自动生成标准教案模板。
-
-### 3. 学生学情统计 (Student Stats)
-*状态: 🟡 独立应用，待集成*
-- [ ] **无缝跳转/SSO**: 门户卡片跳转 student-stats 时携带 JWT/租户，免二次登录。
-- [x] **入口配置**: Portal 首页卡片指向 `/apps/student-stats`，并支持配置 `VITE_STATS_APP_URL` 跳转上传端。
-- [ ] **上传体验**: student-stats 增加模板下载、上传成功/失败提示与错误行反馈，限制批量大小。
-- [x] **导出报表**: BFF `/api/academic/scores/export?format=csv|pdf`，Portal 内置导出按钮（CSV/PDF）。
-- [ ] **概览/趋势**: Portal `/apps/student-stats` 显示考试+班级概览；student-stats 待补充成绩列表、筛选和趋势图。
-- [ ] **UI 统一**: 调整 `apps/student-stats` 顶部导航/配色以匹配 Portal 品牌。
-
-### 4. 更多工具 (More Tools)
-*状态: ⚪️ 规划中（优先智能阅卷，其次组卷，PPT 暂缓）*
-- [ ] **智能阅卷/批改 (`/apps/quiz-grading`)**: 后端已提供作业/答案/提交/导出 CSV 的 MVP；待接入 OCR+LLM、人工复核、AuditLog、Portal 前端与 PDF 导出。
-- [ ] **智能组卷 (`/apps/quiz-builder`)**: 后端提供 mock 生成接口；待对接题库 API、草稿保存、导出 MD/Word/PDF、Portal 前端交互。
-- [ ] **PPT 大纲 (`/apps/ppt`)**: 输入主题 -> 生成 Markdown 大纲；支持版式模板选择、图片占位符、导出 Marp/Slidev；允许二次编辑与版本保存。
+> **Current Phase**: V1.5（从“应用集合”升级为“数据平台”）
+>
+> **核心中的核心**：
+> 1) **教师资源资产化沉淀**（Asset Library）  
+> 2) **学生学习数据采集与分析**（Learning Events + Academic Records）
+>
+> **统一口径文档**：`docs/07_Platform_Architecture_MicroApps_Content.md`
 
 ---
 
-## 🏗 平台能力建设 (Platform Capabilities)
+## P0：平台可用性（先把“能用/能管/能沉淀/能追踪”跑通）
 
-### 用户中心 & 鉴权 (Auth & User)
-- [ ] **真实登录**: 对接 Keycloak 或实现基于数据库的账号密码登录（替换 Mock）。
-- [ ] **个人设置**: 允许用户修改头像、昵称，绑定手机号。
-- [ ] **应用收藏**: 将“常用应用”数据从 LocalStorage 迁移至云端数据库，实现多端同步。
+### 鉴权与用户体系（影响所有微应用）
+- [x] 登录与 JWT：`POST /api/auth/login` + `GET /api/whoami`
+- [x] 登录失败锁定（5 次 / 15 分钟）+ 解锁/重置密码（Admin）
+- [x] Dev 启动自动确保种子账号可用（避免锁死）
+- [ ] 统一“开发默认账号/重置方式”到入口文档与脚本（Portal README / BFF README / 一键命令）
 
-### 运营与配置 (Ops & Config)
-- [ ] **动态配置**: 将 `portalConfig.ts` 移至后端数据库，提供 `/api/config` 接口。
-- [ ] **简易后台**: 允许管理员在后台页面直接添加/下架应用卡片，发布公告。
+### Admin 配置能力（用后台驱动前台，而不是硬编码）
+- [x] **入口/分组配置**：`/api/entries/config` + Admin CRUD（分组/入口）
+- [x] **前台文案与 Tips**：`/api/portal/settings` + Admin 配置页
+- [x] **公告管理**：`/api/announcements` + Admin 管理页（仅首页展示置顶）
+- [x] **用户管理**：角色/状态/导入导出/审批/解锁/重置密码
+- [x] **学生名册**：Admin 导入/导出 + 脚本导入（`StudentsToExcel2026-1-6.xls` 实为 TSV）
+- [x] **资源库/题库后台**：资源库管理、题库管理（最小可用）
+- [x] **学习数据看板**：Events Dashboard + Recent/Stats API
 
-### 运维与工程化 (DevOps)
-- [ ] **Docker 部署**: 编写 Dockerfile，支持 `docker-compose up` 一键拉起所有服务（BFF + Portal + Redis + Postgres）。
-- [ ] **监控告警**: 接入 Sentry 或 Prometheus，监控 BFF 接口报错与响应延迟。
+### DB 与迁移（必须可部署、可重装、可复现）
+- [x] 修复迁移历史（提供可运行 baseline migration）
+- [ ] 明确 DB 策略：SQLite（dev/demo）+ Postgres（prod）与 rebaseline/squash 方案
+- [ ] 补齐 `.gitignore` 与产物清理（db-journal/tsbuildinfo 等）
 
 ---
 
-## 🐛 已知问题 (Known Issues)
-- [ ] **移动端适配**: Portal 在手机端侧边栏交互不够流畅。
-- [ ] **Markdown 渲染**: 目前的简易渲染器不支持数学公式 ($LaTeX$) 的复杂嵌套。
+## P1：数据中台（内容 & 学习数据）
 
-## ✅ 已完成 (Done)
-- [x] **品牌重塑**: 全线更名为 **ReOpenInnoLab-智教空间**。
-- [x] **门户框架**: 响应式布局、卡片网格、全局搜索、配置驱动引擎。
-- [x] **BFF 基座**: Node.js (Fastify) + Prisma 架构，支持鉴权与限流。
-- [x] **MinerU 对接**: 完成了 OCR 引擎的 API 封装与联调。
+### 内容中台（Teacher Assets）
+- [x] **Asset API**：统一收敛 `/api/assets`（可见性/软删/校验）
+- [x] **题库 API**：`/api/questions` CRUD + 发布/导出（可运营的最小能力）
+- [ ] **大文件存储适配层**：local → S3/MinIO + 预签名上传 + `contentUrl/metadata` 规范
+- [ ] **开放 API 契约**：导出 OpenAPI，生成 Portal/微应用 typed client（减少 401/headers 漏带）
+
+### 学习数据中台（Student Learning Data）
+- [x] **LearningEvent**：`POST /api/events`（单条/批量）+ `/api/events/stats`
+- [ ] **事件字典（Taxonomy）**：最小可版本化 action 列表 + payload 必填键
+- [ ] **自动事件**：关键服务端动作自动写入事件（资产创建/发布/导出/阅卷发布等）
+
+---
+
+## P2：关键业务闭环（会出现“复杂应用”的地方）
+
+### 智能阅卷（复杂应用示例）
+- [x] 基础链路：批次/提交/判分（Mock/LLM-ready）+ 成绩写回 + CSV 资产沉淀
+- [ ] **人工复核**：`/api/grading/submissions/:id/review` + UI 调分 + 重新发布
+- [ ] **模板驱动 ROI**：答题卡模板 Asset → 自动定位/复用/版本
+- [ ] **个人讲评/报告**：PDF/Asset 沉淀（可分享/可追踪）
+
+### 学情分析
+- [x] 从本地 Excel 改为 BFF `/api/academic/*`
+- [ ] 趋势/个体追踪视图 + 上传体验硬化（模板/错误行报告）
+
+---
+
+## P3：生态扩展（“别人写的新应用怎么接进来”）
+- [ ] 明确“接入合同”：路由 + Entry/Group +（可选）Tool + 权限 + 数据沉淀点（Asset/Event）
+- [ ] 提供微应用模板（standalone + integrated）与最小示例（whoami、assets、events）
+
+---
+
+## P4：工程化与部署
+- [ ] Dockerfile（Portal/BFF）+ docker-compose（DB/Redis/MinIO）
+- [ ] CI（build/lint/typecheck）+ 数据库迁移流水线（deploy）

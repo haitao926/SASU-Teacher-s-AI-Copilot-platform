@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify'
-import { getTenantId } from '../utils/tenant'
 import {
   createAssignment,
   listAssignments,
@@ -8,10 +7,63 @@ import {
   listSubmissions,
   exportGradingCsv
 } from '../services/grading'
+import { gradeImage } from '../services/aiGrading'
+import { gradePaper } from '../services/paperGrading.service'
 
 type AuthUser = { sub: string }
 
 export default async function registerGradingRoutes(app: FastifyInstance) {
+  // 新版：智能阅卷 - 整页批改
+  app.post('/grading/grade-paper', {
+    preHandler: [app.authenticate],
+    schema: {
+      tags: ['grading'],
+      summary: 'Grade a full paper using the bbox-based workflow',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['imageBase64'],
+        properties: {
+          imageBase64: { type: 'string', description: 'Base64 encoded image of the full paper' },
+        }
+      }
+    }
+  }, async (request) => {
+    const body = request.body as { imageBase64: string }
+    // This new service orchestrates the MinerU -> Bbox Attribution -> Grading flow
+    return gradePaper(body.imageBase64)
+  })
+
+  // 旧版：智能阅卷 - 单题图片批改
+  app.post('/grading/grade-image', {
+    preHandler: [app.authenticate],
+    schema: {
+      tags: ['grading'],
+      summary: 'Grade a single question image using AI',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['imageBase64'],
+        properties: {
+          imageBase64: { type: 'string', description: 'Base64 encoded image' },
+          questionText: { type: 'string' },
+          correctAnswer: { type: 'string' },
+          maxPoints: { type: 'number' },
+          ocrText: { type: 'string' }
+        }
+      }
+    }
+  }, async (request) => {
+    const body = request.body as any
+    return gradeImage({
+      imageBase64: body.imageBase64,
+      questionText: body.questionText,
+      correctAnswer: body.correctAnswer,
+      maxPoints: body.maxPoints,
+      ocrText: body.ocrText
+    })
+  })
+
   // 创建作业/试卷
   app.post('/grading/assignments', {
     preHandler: [app.authenticate],
@@ -31,7 +83,7 @@ export default async function registerGradingRoutes(app: FastifyInstance) {
       }
     }
   }, async (request, reply) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     const body = request.body as any
     const assignment = await createAssignment({
       tenantId,
@@ -48,7 +100,7 @@ export default async function registerGradingRoutes(app: FastifyInstance) {
     preHandler: [app.authenticate],
     schema: { tags: ['grading'], summary: 'List assignments', security: [{ bearerAuth: [] }] }
   }, async (request) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     return listAssignments(tenantId)
   })
 
@@ -81,7 +133,7 @@ export default async function registerGradingRoutes(app: FastifyInstance) {
       }
     }
   }, async (request, reply) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     const body = request.body as any
     const items = (body.items || []).map((i: any) => ({
       tenantId,
@@ -112,6 +164,16 @@ export default async function registerGradingRoutes(app: FastifyInstance) {
           assignmentId: { type: 'string' },
           studentId: { type: 'string' },
           payloadUrl: { type: 'string' },
+          grading: {
+            type: 'object',
+            properties: {
+              objectiveScore: { type: 'number' },
+              subjectiveScore: { type: 'number' },
+              totalScore: { type: 'number' },
+              details: {},
+              publishToScores: { type: 'boolean' }
+            }
+          },
           answers: {
             type: 'array',
             items: {
@@ -127,14 +189,19 @@ export default async function registerGradingRoutes(app: FastifyInstance) {
       }
     }
   }, async (request) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     const body = request.body as any
+    const user = request.user as any
     return createSubmission({
       tenantId,
       assignmentId: body.assignmentId,
       studentId: body.studentId,
       payloadUrl: body.payloadUrl,
-      answers: body.answers
+      answers: body.answers,
+      grading: body.grading,
+      actorId: user?.sub,
+      actorRole: user?.role,
+      appCode: 'quiz-grading'
     })
   })
 
@@ -153,7 +220,7 @@ export default async function registerGradingRoutes(app: FastifyInstance) {
       }
     }
   }, async (request) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     const q = request.query as any
     return listSubmissions(tenantId, q.assignmentId)
   })
@@ -174,7 +241,7 @@ export default async function registerGradingRoutes(app: FastifyInstance) {
       }
     }
   }, async (request, reply) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     const q = request.query as any
     const csv = await exportGradingCsv(tenantId, q.assignmentId)
     reply

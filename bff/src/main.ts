@@ -2,6 +2,7 @@ import fastify from 'fastify'
 import cors from '@fastify/cors'
 import swagger from '@fastify/swagger'
 import swaggerUI from '@fastify/swagger-ui'
+import multipart from '@fastify/multipart'
 import config from './config'
 import authPlugin from './plugins/auth'
 import rateLimitPlugin from './plugins/rateLimit'
@@ -21,7 +22,13 @@ import registerOcrRoutes from './routes/ocr'
 import registerChatRoutes from './routes/chat'
 import registerGradingRoutes from './routes/grading'
 import registerQuizRoutes from './routes/quizzes'
+import registerStudentRoutes from './routes/students'
 import registerEntryRoutes from './routes/entries'
+import registerQuestionRoutes from './routes/questions'
+import registerEventRoutes from './routes/events'
+import registerPortalRoutes from './routes/portal'
+import registerAuditLogRoutes from './routes/auditLogs'
+import { ensureDevUsers } from './utils/devSeed'
 import pkg from '../package.json'
 
 const buildServer = async () => {
@@ -47,6 +54,11 @@ const buildServer = async () => {
   await app.register(requestIdPlugin)
   await app.register(rateLimitPlugin)
   await app.register(authPlugin)
+  await app.register(multipart, {
+    limits: {
+      fileSize: 50 * 1024 * 1024 // 50MB
+    }
+  })
 
   await app.register(swagger, {
     openapi: {
@@ -89,7 +101,12 @@ const buildServer = async () => {
   app.register(registerQuizRoutes, { prefix: '/api' })
   app.register(registerOcrRoutes, { prefix: '/api' })
   app.register(registerChatRoutes, { prefix: '/api' })
+  app.register(registerStudentRoutes, { prefix: '/api' })
   app.register(registerEntryRoutes, { prefix: '/api' })
+  app.register(registerQuestionRoutes, { prefix: '/api' })
+  app.register(registerEventRoutes, { prefix: '/api' })
+  app.register(registerPortalRoutes, { prefix: '/api' })
+  app.register(registerAuditLogRoutes, { prefix: '/api' })
 
   app.setErrorHandler((err: any, request: any, reply: any) => {
     request.log.error({ err }, 'unhandled error')
@@ -106,6 +123,12 @@ const buildServer = async () => {
 const start = async () => {
   const app = await buildServer()
   try {
+    if (config.env === 'development') {
+      const seeded = await ensureDevUsers()
+      if (seeded.created.length > 0) {
+        app.log.info({ users: seeded.created }, 'seeded dev users')
+      }
+    }
     await app.listen({ port: config.port, host: config.host })
     app.log.info(`BFF ready on http://${config.host}:${config.port}`)
   } catch (err) {

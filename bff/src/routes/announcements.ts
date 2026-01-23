@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { createAnnouncement, deleteAnnouncement, listAnnouncements } from '../services/announcements'
+import { requirePermission } from '../utils/permissions'
 
 export default async function registerAnnouncementRoutes(app: FastifyInstance) {
   // Public: Get all announcements
@@ -35,7 +36,7 @@ export default async function registerAnnouncementRoutes(app: FastifyInstance) {
   app.post<{ Body: { title: string; content: string; tag?: string; tagType?: string; pinned?: boolean } }>(
     '/announcements',
     {
-      preHandler: [app.authenticate], // Ensure user is logged in
+      preHandler: [app.authenticate, requirePermission('announcements.manage')], // Ensure user is logged in
       schema: {
         tags: ['announcements'],
         summary: 'Create announcement',
@@ -55,9 +56,6 @@ export default async function registerAnnouncementRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const user = request.user as { role: string; sub: string }
-      if (user.role !== 'ADMIN') {
-        return reply.code(403).send({ message: 'Forbidden' })
-      }
 
       const newItem = await createAnnouncement(request.body, user.sub)
       return newItem
@@ -68,7 +66,7 @@ export default async function registerAnnouncementRoutes(app: FastifyInstance) {
   app.delete<{ Params: { id: string } }>(
     '/announcements/:id',
     {
-      preHandler: [app.authenticate],
+      preHandler: [app.authenticate, requirePermission('announcements.manage')],
       schema: {
         tags: ['announcements'],
         summary: 'Delete announcement',
@@ -82,11 +80,6 @@ export default async function registerAnnouncementRoutes(app: FastifyInstance) {
       }
     },
     async (request, reply) => {
-      const user = request.user as { role: string }
-      if (user.role !== 'ADMIN') {
-        return reply.code(403).send({ message: 'Forbidden' })
-      }
-
       const { id } = request.params
       return deleteAnnouncement(id)
     }

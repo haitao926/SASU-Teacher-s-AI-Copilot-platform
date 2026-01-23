@@ -24,7 +24,7 @@
 ## ✨ 核心特性 (Key Features)
 
 - **统一入口**：单点登录 (SSO) 就绪的架构，一个账号访问所有教学工具。
-- **配置驱动**：通过 `portalConfig.ts` 即可轻松管理应用入口、公告和菜单。
+- **配置驱动**：生产环境由后台（入口/分组/公告/前台文案）驱动；开发环境可回退 `iai-teaching-portal/src/data/portalConfig.ts`。
 - **智能分析**：集成 ECharts，提供直观的学生数据洞察。
 - **AI 就绪**：BFF 层预置了 SSE (Server-Sent Events) 支持，完美适配流式 AI 响应。
 - **安全可靠**：内置基于 IP 的限流机制和 JWT 身份验证基础。
@@ -61,11 +61,18 @@ cd bff && npm install && cd ..
 ```bash
 ./start_dev.sh
 ```
+- 首次启动会自动初始化 BFF 数据库（Prisma migrations）并写入种子数据。
 - **BFF 服务端**: `http://localhost:8080`
 - **教学门户**: `http://localhost:5173`
 - **学情统计**: `http://localhost:5174`
 - **智能阅卷**: `http://localhost:5175`
 - **智能组卷**: `http://localhost:5176`
+
+### 默认账号（开发环境）
+- `admin / admin123`（可进入后台管理 `/admin`）
+- `teacher1 / password123`
+
+如提示 `Account locked, please try later`：重启 BFF，或执行 `cd bff && npm run reset:admin`。
 
 **🟡 生产模拟 (Production Simulation)**
 构建所有项目并以静态服务方式运行，模拟生产环境。
@@ -104,11 +111,13 @@ cd bff && npm install && cd ..
 更多详细信息，请参考各模块的具体文档：
 
 - [架构总览](docs/00_Architecture_Overview.md)
+- [平台统一架构与微应用/内容中台规范（整合版）](docs/07_Platform_Architecture_MicroApps_Content.md)
 - [门户设计规范](docs/01_Portal_Design_Spec.md)
 - [后端架构指南](docs/02_Backend_Architecture_Guide.md)
 - [MinerU 集成说明](docs/03_MinerU_Integration.md)
 - [数据地基规划](docs/04_Data_Foundation_Plan.md)
 - [实施路线图](docs/05_Execution_Plan.md)
+- [答题卡生成计划](docs/08_Answer_Sheet_Generator_Plan.md)
 
 ## 📄 版权说明
 

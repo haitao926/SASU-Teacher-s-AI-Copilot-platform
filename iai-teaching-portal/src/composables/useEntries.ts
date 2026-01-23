@@ -58,10 +58,6 @@ export function useEntries() {
   }
 
   // 获取推荐入口
-  const featuredEntries = computed(() => {
-    return entries.value.filter(entry => entry.featured)
-  })
-
   // 根据使用量排序
   function sortByUsage(descending = true): EntryCard[] {
     return [...entries.value].sort((a, b) =>
@@ -72,8 +68,6 @@ export function useEntries() {
   // 根据排序选项获取入口
   function getSortedEntries(sortBy: SortOption): EntryCard[] {
     switch (sortBy) {
-      case 'featured':
-        return featuredEntries.value
       case 'usage':
         return sortByUsage()
       case 'newest':
@@ -100,7 +94,6 @@ export function useEntries() {
     entries,
     loading,
     error,
-    featuredEntries,
     favoriteEntries, // 导出
     isFavorite,      // 导出
     toggleFavorite,  // 导出

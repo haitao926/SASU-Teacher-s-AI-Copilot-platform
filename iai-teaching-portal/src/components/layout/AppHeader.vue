@@ -7,7 +7,7 @@ import { useAuth } from '@/composables/useAuth'
 
 const searchQuery = defineModel<string>('searchQuery', { required: true })
 const router = useRouter()
-const { user, isLoggedIn, logout } = useAuth()
+const { user, isLoggedIn, canAccessAdmin, logout } = useAuth()
 
 const displayName = computed(() => user.value?.name || '未登录')
 const displayRole = computed(() => user.value?.role || '访客')
@@ -44,6 +44,26 @@ function handleAuthClick() {
 
       <!-- 右侧：操作按钮 -->
       <div class="flex items-center gap-3">
+        <!-- 后台管理 -->
+        <button
+          v-if="canAccessAdmin"
+          class="p-2 rounded-lg hover:bg-gray-100 transition-colors group"
+          title="后台管理"
+          @click="router.push('/admin')"
+        >
+          <Icon icon="mdi:cog-outline" class="w-5 h-5 text-gray-600 group-hover:text-primary" />
+        </button>
+
+        <!-- 我的资源库 -->
+        <button
+          v-if="isLoggedIn"
+          class="p-2 rounded-lg hover:bg-gray-100 transition-colors group"
+          title="我的资源库"
+          @click="router.push('/assets')"
+        >
+          <Icon icon="mdi:folder-multiple-outline" class="w-5 h-5 text-gray-600 group-hover:text-primary" />
+        </button>
+
         <!-- 帮助文档 -->
         <button
           class="p-2 rounded-lg hover:bg-gray-100 transition-colors group"

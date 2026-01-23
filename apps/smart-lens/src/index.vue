@@ -5,9 +5,13 @@ import { useAuth } from '@/composables/useAuth'
 import MarkdownIt from 'markdown-it'
 import mk from 'markdown-it-katex'
 import 'katex/dist/katex.min.css'
+import 'katex/contrib/mhchem/mhchem.js'
 
 // Init markdown
-const md = new MarkdownIt({ html: true }).use(mk)
+const md = new MarkdownIt({ html: true, linkify: true, breaks: true }).use(mk, {
+  throwOnError: false,
+  strict: 'ignore'
+})
 
 interface LensTask {
   id: string
@@ -17,12 +21,14 @@ interface LensTask {
   createdAt: number
 }
 
-const { isLoggedIn } = useAuth()
+const { isLoggedIn, token, isAdmin } = useAuth()
 const currentImage = ref<string | null>(null)
 const currentResult = ref('')
 const isProcessing = ref(false)
 const history = ref<LensTask[]>([])
 const error = ref('')
+const savingToAssets = ref(false)
+const exportingToQuestions = ref(false)
 
 // Load history from local storage for MVP (since API is async)
 onMounted(() => {
@@ -88,7 +94,10 @@ async function processImage(file: File) {
       const base64 = currentImage.value
       const res = await fetch('/api/ocr/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token.value}`
+        },
         body: JSON.stringify({
           fileName: `lens-snap-${Date.now()}.png`,
           contentBase64: base64,
@@ -117,7 +126,9 @@ async function processImage(file: File) {
 async function pollResult(taskId: string) {
   const timer = setInterval(async () => {
     try {
-      const res = await fetch(`/api/ocr/result/${taskId}`)
+      const res = await fetch(`/api/ocr/result/${taskId}`, {
+        headers: { 'Authorization': `Bearer ${token.value}` }
+      })
       if (res.ok) {
         const data = await res.json()
         if (data.status === 'done') {
@@ -144,6 +155,128 @@ async function pollResult(taskId: string) {
       isProcessing.value = false
     }
   }, 1000)
+}
+
+async function saveToAssets() {
+  if (!currentResult.value.trim()) return
+  if (!token.value) {
+    alert('请先登录后使用')
+    return
+  }
+
+  const defaultTitle = `SmartLens 识图结果 ${new Date().toLocaleString()}`
+  const title = window.prompt('保存到资源库：标题', defaultTitle)?.trim()
+  if (!title) return
+  const tagsInput = window.prompt('标签（逗号分隔，可选）', '') ?? ''
+  const tags = tagsInput.split(/[,， ]+/).map((t) => t.trim()).filter(Boolean)
+
+  savingToAssets.value = true
+  try {
+    const res = await fetch('/api/assets', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.value}`
+      },
+      body: JSON.stringify({
+        title,
+        type: 'markdown',
+        content: currentResult.value,
+        tags,
+        visibility: 'PRIVATE'
+      })
+    })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.message || '保存失败')
+    }
+
+    const asset = await res.json()
+    await fetch('/api/events', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.value}`
+      },
+      body: JSON.stringify({
+        action: 'asset.created',
+        appCode: 'smart-lens',
+        targetType: 'Asset',
+        targetId: asset.id
+      })
+    }).catch(() => {})
+
+    alert('已保存到资源库')
+  } catch (e: any) {
+    alert(e.message || '保存失败')
+  } finally {
+    savingToAssets.value = false
+  }
+}
+
+async function exportToQuestionBank() {
+  if (!currentResult.value.trim()) return
+  if (!token.value) {
+    alert('请先登录后使用')
+    return
+  }
+
+  const subject = window.prompt('导入题库：学科（可选）', '')?.trim() || ''
+  const grade = window.prompt('导入题库：年级（可选）', '')?.trim() || ''
+  const difficultyRaw = window.prompt('导入题库：难度 1-5（可选，默认 3）', '3')?.trim() || '3'
+  const difficulty = Math.min(Math.max(parseInt(difficultyRaw, 10) || 3, 1), 5)
+  const status =
+    isAdmin.value && window.confirm('是否直接导入为“已发布”？（仅管理员）')
+      ? 'PUBLISHED'
+      : 'DRAFT'
+
+  exportingToQuestions.value = true
+  try {
+    const res = await fetch('/api/questions/import', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.value}`
+      },
+      body: JSON.stringify({
+        text: currentResult.value,
+        subject: subject || undefined,
+        grade: grade || undefined,
+        difficulty,
+        status
+      })
+    })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.message || '导入失败')
+    }
+
+    const data = await res.json()
+    const created = Number(data?.created ?? 0)
+
+    await fetch('/api/events', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.value}`
+      },
+      body: JSON.stringify({
+        action: 'question.imported',
+        appCode: 'smart-lens',
+        targetType: 'Question',
+        targetId: data?.items?.[0]?.id,
+        payload: { created, source: 'ocr' }
+      })
+    }).catch(() => {})
+
+    alert(`导入完成：新增 ${created} 题（已进入题库管理）`)
+  } catch (e: any) {
+    alert(e.message || '导入失败')
+  } finally {
+    exportingToQuestions.value = false
+  }
 }
 
 function copyText(text: string) {
@@ -255,6 +388,21 @@ const renderedResult = computed(() => {
                 class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-white hover:border-primary hover:text-primary transition-all shadow-sm"
               >
                 <Icon icon="mdi:content-copy" /> 复制源码
+              </button>
+              <button
+                @click="exportToQuestionBank"
+                :disabled="exportingToQuestions"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-60 transition-all shadow-sm"
+                title="将识别结果按规则解析为题目并写入题库"
+              >
+                <Icon icon="mdi:database-plus" /> {{ exportingToQuestions ? '导入中...' : '导入题库' }}
+              </button>
+              <button
+                @click="saveToAssets"
+                :disabled="savingToAssets"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 disabled:opacity-60 transition-all shadow-sm"
+              >
+                <Icon icon="mdi:content-save" /> {{ savingToAssets ? '保存中...' : '存入资源库' }}
               </button>
             </div>
           </div>

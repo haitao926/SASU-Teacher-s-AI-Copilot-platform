@@ -1,37 +1,139 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
+import { useAuth } from '@/composables/useAuth'
 
 const router = useRouter()
 const route = useRoute()
 
-const menuItems = [
+const { isAdmin, hasPermission } = useAuth()
+
+const menuSections = [
   {
-    path: '/admin/entries',
-    icon: 'mdi:view-grid',
-    label: '入口管理',
-    name: 'admin-entries'
+    key: 'content',
+    label: '前台与入口',
+    items: [
+      {
+        path: '/admin/portal',
+        icon: 'mdi:monitor-dashboard',
+        label: '前台配置',
+        name: 'admin-portal',
+        permission: 'portal.manage'
+      },
+      {
+        path: '/admin/entries',
+        icon: 'mdi:view-grid',
+        label: '入口管理',
+        name: 'admin-entries',
+        permission: 'entries.manage'
+      },
+      {
+        path: '/admin/announcements',
+        icon: 'mdi:bell',
+        label: '公告管理',
+        name: 'admin-announcements',
+        permission: 'announcements.manage'
+      },
+      {
+        path: '/admin/groups',
+        icon: 'mdi:folder',
+        label: '分组管理',
+        name: 'admin-groups',
+        permission: 'entries.manage'
+      }
+    ]
   },
   {
-    path: '/admin/announcements',
-    icon: 'mdi:bell',
-    label: '公告管理',
-    name: 'admin-announcements'
+    key: 'people',
+    label: '人员与账号',
+    items: [
+      {
+        path: '/admin/users',
+        icon: 'mdi:account-group',
+        label: '教职工账号',
+        name: 'admin-users',
+        permission: 'users.manage'
+      },
+      {
+        path: '/admin/students',
+        icon: 'mdi:account-multiple-plus',
+        label: '学生档案',
+        name: 'admin-students',
+        permission: 'students.manage'
+      }
+    ]
   },
   {
-    path: '/admin/users',
-    icon: 'mdi:account-group',
-    label: '用户管理',
-    name: 'admin-users'
+    key: 'assets',
+    label: '资源与题库',
+    items: [
+      {
+        path: '/admin/resources',
+        icon: 'mdi:folder-open',
+        label: '资源库',
+        name: 'admin-resources',
+        permission: 'assets.manage_all'
+      },
+      {
+        path: '/admin/questions',
+        icon: 'mdi:format-list-bulleted',
+        label: '题库管理',
+        name: 'admin-questions',
+        permission: 'questions.manage_all'
+      }
+    ]
   },
   {
-    path: '/admin/groups',
-    icon: 'mdi:folder',
-    label: '分组管理',
-    name: 'admin-groups'
+    key: 'data',
+    label: '数据与审计',
+    items: [
+      {
+        path: '/admin/events',
+        icon: 'mdi:chart-timeline-variant',
+        label: '学习数据',
+        name: 'admin-events',
+        permission: 'events.view_all'
+      },
+      {
+        path: '/admin/audit',
+        icon: 'mdi:clipboard-check',
+        label: '审计日志',
+        name: 'admin-audit',
+        permission: 'audit.view'
+      }
+    ]
   }
 ]
+
+const openSections = ref<Record<string, boolean>>({
+  content: true,
+  people: true,
+  assets: false,
+  data: false
+})
+
+const sectionKeyByRouteName = new Map<string, string>([
+  ['admin-portal', 'content'],
+  ['admin-entries', 'content'],
+  ['admin-announcements', 'content'],
+  ['admin-groups', 'content'],
+  ['admin-users', 'people'],
+  ['admin-students', 'people'],
+  ['admin-resources', 'assets'],
+  ['admin-questions', 'assets'],
+  ['admin-events', 'data'],
+  ['admin-audit', 'data']
+])
+
+const visibleMenuSections = computed(() => {
+  return menuSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => isAdmin.value || hasPermission(item.permission))
+    }))
+    .filter((section) => section.items.length > 0)
+})
 
 const pageTitle = computed(() => {
   return route.meta.title || '后台管理'
@@ -40,6 +142,33 @@ const pageTitle = computed(() => {
 function goHome() {
   router.push('/')
 }
+
+function isSectionOpen(key: string) {
+  return openSections.value[key] !== false
+}
+
+function toggleSection(key: string) {
+  openSections.value = {
+    ...openSections.value,
+    [key]: !isSectionOpen(key)
+  }
+}
+
+watch(
+  () => route.name,
+  (name) => {
+    if (!name) return
+    const key = sectionKeyByRouteName.get(String(name))
+    if (!key) return
+    if (!isSectionOpen(key)) {
+      openSections.value = {
+        ...openSections.value,
+        [key]: true
+      }
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -61,16 +190,32 @@ function goHome() {
 
       <!-- 菜单 -->
       <nav class="sidebar-nav">
-        <RouterLink
-          v-for="item in menuItems"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ active: route.name === item.name }"
-        >
-          <Icon :icon="item.icon" class="w-5 h-5" />
-          <span>{{ item.label }}</span>
-        </RouterLink>
+        <div v-for="section in visibleMenuSections" :key="section.key" class="nav-section">
+          <button
+            class="section-header"
+            type="button"
+            :aria-expanded="isSectionOpen(section.key)"
+            @click="toggleSection(section.key)"
+          >
+            <span class="section-title">{{ section.label }}</span>
+            <Icon
+              :icon="isSectionOpen(section.key) ? 'mdi:chevron-down' : 'mdi:chevron-right'"
+              class="section-icon"
+            />
+          </button>
+          <div class="section-items" v-show="isSectionOpen(section.key)">
+            <RouterLink
+              v-for="item in section.items"
+              :key="item.path"
+              :to="item.path"
+              class="nav-item"
+              :class="{ active: route.name === item.name }"
+            >
+              <Icon :icon="item.icon" class="w-5 h-5" />
+              <span>{{ item.label }}</span>
+            </RouterLink>
+          </div>
+        </div>
       </nav>
 
       <!-- 返回前台 -->
@@ -140,6 +285,50 @@ function goHome() {
   overflow-y: auto;
 }
 
+.nav-section {
+  margin-bottom: var(--spacing-4);
+}
+
+.section-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-2) var(--spacing-3);
+  border-radius: var(--radius-md);
+  color: var(--gray-500);
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  text-align: left;
+}
+
+.section-header:hover {
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+.section-title {
+  letter-spacing: 0.5px;
+}
+
+.section-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--gray-400);
+}
+
+.section-header:hover .section-icon {
+  color: var(--gray-600);
+}
+
+.section-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-2);
+}
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -148,7 +337,6 @@ function goHome() {
   border-radius: var(--radius-lg);
   color: var(--gray-700);
   transition: all var(--transition-base);
-  margin-bottom: var(--spacing-2);
   font-size: 14px;
   font-weight: 500;
 }

@@ -29,6 +29,15 @@ echo "------------------------------------------------"
 echo "🔌 Starting Backend (BFF)..."
 cd bff
 check_and_install
+# Initialize database on first run (or after cleaning local DB)
+if [ ! -f "prisma/dev.db" ]; then
+    echo "🗄️  Initializing local database (migrations + seed)..."
+    npm run db:deploy
+    npm run seed
+else
+    # Ensure migrations are up-to-date (non-interactive)
+    npm run db:deploy
+fi
 # Run in background
 npm run dev &
 cd ..

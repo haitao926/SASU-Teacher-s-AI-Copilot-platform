@@ -42,3 +42,26 @@ Thumbs.db
 **/.npm-cache/
 bff/src/generated/
 bff/prisma/*.db
+
+# SQLite journals / temp files
+*.db-journal
+*.db-wal
+*.db-shm
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm
+
+# TypeScript build cache
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Accidental local workspace packages
+apps/iai-teaching-portal/
+
+# Prisma temp folder (can appear during local experiments)
+bff/prisma/prisma/
+
+# Local Test Assets
+asset/
+transcript-template-word-2026.docx
+image.png

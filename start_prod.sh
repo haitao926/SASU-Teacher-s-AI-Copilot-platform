@@ -20,6 +20,7 @@ check_and_install() {
         echo "📦 Installing dependencies for $(pwd)..."
         npm install
     fi
+    现在
 }
 
 # 1. Build and Start BFF
@@ -27,6 +28,13 @@ echo "------------------------------------------------"
 echo "🔌 Building and Starting Backend (BFF)..."
 cd bff
 check_and_install
+echo "🗄️  Ensuring database migrations..."
+if [ ! -f "prisma/dev.db" ]; then
+    npm run db:deploy
+    npm run seed
+else
+    npm run db:deploy
+fi
 echo "🔨 Building BFF..."
 npm run build
 echo "▶️  Starting BFF..."

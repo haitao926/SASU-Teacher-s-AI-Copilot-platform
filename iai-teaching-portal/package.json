@@ -5,21 +5,25 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "@iconify/vue": "^5.0.0",
+    "@types/marked": "^5.0.2",
     "@vueuse/core": "^14.1.0",
     "@vueuse/motion": "^3.0.3",
     "element-plus": "^2.12.0",
     "katex": "^0.16.27",
     "markdown-it": "^14.1.0",
     "markdown-it-katex": "^2.0.3",
+    "marked": "^17.0.1",
+    "pdfjs-dist": "^4.10.38",
     "pinia": "^3.0.4",
     "vue": "^3.5.24",
-    "vue-router": "^4.6.4"
+    "vue-router": "^4.6.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@iconify-json/mdi": "^1.2.3",

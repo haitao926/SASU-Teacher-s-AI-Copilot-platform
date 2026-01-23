@@ -16,7 +16,6 @@ export interface PortalEntry {
   tags: string[]
   url: string
   status: EntryStatus
-  featured?: boolean
   group: string // References PortalGroup.id
   usage?: number
   order?: number
@@ -68,7 +67,6 @@ export const portalConfig: PortalConfig = {
       tags: ['OCR', '公式', '工具'],
       url: '/apps/smart-lens',
       status: 'new',
-      featured: true,
       group: 'creation',
       usage: 0,
       order: 0
@@ -82,7 +80,6 @@ export const portalConfig: PortalConfig = {
       tags: ['教案', '备课', 'AI'],
       url: '/apps/lesson-plan',
       status: 'new',
-      featured: true,
       group: 'creation',
       usage: 0,
       order: 1
@@ -150,7 +147,6 @@ export const portalConfig: PortalConfig = {
       tags: ['PDF解析', '文档', '资源'],
       url: '/apps/doc-parser',
       status: 'new',
-      featured: true,
       group: 'resources',
       usage: 0,
       order: 0
@@ -177,7 +173,6 @@ export const portalConfig: PortalConfig = {
       tags: ['AI聊天', '备课', '助手'],
       url: '/apps/chat',
       status: 'new',
-      featured: true,
       group: 'resources',
       usage: 0,
       order: 2
@@ -230,9 +225,8 @@ export const portalConfig: PortalConfig = {
       icon: 'gradient-red',
       iconName: 'mdi:file-edit-outline',
       tags: ['测评', '自动组卷'],
-      url: 'http://localhost:5176',
+      url: '/apps/quiz-builder',
       status: 'new',
-      featured: true,
       group: 'exam',
       usage: 89,
       order: 1
@@ -246,15 +240,27 @@ export const portalConfig: PortalConfig = {
       icon: 'gradient-blue',
       iconName: 'mdi:file-check-outline',
       tags: ['AI批改', '测评'],
-      url: 'http://localhost:5175',
+      url: '/apps/quiz-grading',
       status: 'new',
-      featured: true,
       group: 'grading',
       usage: 1280,
       order: 1
     },
 
     // --- 5. 学情洞察 (insights) ---
+    {
+      id: 'assessment-data-manager',
+      name: '测评数据管理',
+      description: '集中管理考试数据，支持批量上传、解析与维护',
+      icon: 'gradient-teal',
+      iconName: 'mdi:database-edit-outline',
+      tags: ['数据', '管理', '上传'],
+      url: '/apps/assessment-data-manager',
+      status: 'new',
+      group: 'insights',
+      usage: 0,
+      order: 0
+    },
     {
       id: 'analysis',
       name: '成绩与作业分析',
@@ -264,7 +270,6 @@ export const portalConfig: PortalConfig = {
       tags: ['数据分析', '反馈'],
       url: 'https://example.com/analysis',
       status: 'new',
-      featured: true,
       group: 'insights',
       usage: 523,
       order: 1
@@ -289,7 +294,7 @@ export const portalConfig: PortalConfig = {
       icon: 'gradient-indigo',
       iconName: 'mdi:poll',
       tags: ['统计', '数据', '成绩'],
-      url: 'http://localhost:5174',
+      url: '/apps/student-stats',
       status: 'new',
       group: 'insights',
       usage: 0,
@@ -304,7 +309,6 @@ export const portalConfig: PortalConfig = {
       tags: ['成绩', '证明', 'PDF'],
       url: '/apps/transcript-generator',
       status: 'new',
-      featured: true,
       group: 'insights',
       usage: 0,
       order: 4

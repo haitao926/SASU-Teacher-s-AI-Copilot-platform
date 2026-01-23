@@ -127,3 +127,71 @@ export async function getTaskState(batchId: string): Promise<MineruTaskState> {
 export function generateDataId() {
   return randomUUID()
 }
+
+/**
+ * Mocks the output of MinerU for a given image, returning a structured JSON
+ * with text spans and their bounding boxes.
+ * In a real scenario, this would involve the full async upload/poll/download flow.
+ */
+export async function processImageWithMineru(imageBase64: string): Promise<any> {
+  if (config.mineru.mock) {
+    console.log('[MinerU] Using mock processing.')
+    // This mock data is designed to align with `asset/grading-config.json`
+    // It simulates that the student selected B for Q1, C for Q2, and wrote text for Q31.
+    return Promise.resolve({
+      page_size: { width: 1024, height: 1448 }, // A4-like aspect ratio
+      page_idx: 0,
+      spans: [
+        // --- Mock data for Objective Questions ---
+        // Q1: Correct is B, student fills B
+        { content: 'B', bbox: [198, 348, 240, 368] },
+        // Q2: Correct is C, student fills C
+        { content: 'C', bbox: [261, 348, 303, 368] },
+        // Q3: Correct is B, student fills A
+        { content: 'A', bbox: [324, 348, 366, 368] },
+        // Q21: Correct is T, student fills T
+        { content: 'T', bbox: [198, 564, 240, 584] },
+        // Q22: Correct is T, student fills F
+        { content: 'F', bbox: [261, 564, 303, 584] },
+
+        // --- Mock data for Subjective Questions ---
+        // Q31: Some handwritten text
+        { content: '言之有理', bbox: [130, 740, 300, 760] },
+        { content: '即可得分', bbox: [130, 765, 300, 785] },
+      ]
+    })
+  }
+
+  // --- Real MinerU Flow ---
+  if (!mineruEnabled()) {
+    throw new Error('MinerU service is not configured.')
+  }
+
+  // 1. Get upload URL
+  const dataId = generateDataId()
+  const { uploadUrl, batchId } = await applyUploadUrl(`paper-${dataId}.jpg`, dataId)
+
+  // 2. Upload image
+  const buffer = toBuffer(imageBase64)
+  await uploadToSignedUrl(uploadUrl, buffer, 'image/jpeg')
+
+  // 3. Poll for result
+  let state = await getTaskState(batchId)
+  const maxRetries = 30 // 30 retries * 2s = 60s timeout
+  let retries = 0
+  while (state.status === 'processing' && retries < maxRetries) {
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    state = await getTaskState(batchId)
+    retries++
+  }
+
+  if (state.status !== 'done' || !state.fullZipUrl) {
+    throw new Error(`MinerU task failed or timed out. Status: ${state.status}, Error: ${state.error}`)
+  }
+
+  // 4. Download and extract result from zip
+  // In a real implementation, we would download the zip, find the JSON file, and parse it.
+  // For now, this part is left as an exercise.
+  console.log(`[MinerU] Task done. Result zip at: ${state.fullZipUrl}`)
+  throw new Error('Real MinerU zip download and parsing not implemented yet.')
+}

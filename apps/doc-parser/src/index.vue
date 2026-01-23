@@ -304,22 +304,30 @@ async function handleSaveAsset() {
           <!-- Left: Original View (Placeholder for now) -->
           <div class="w-1/2 border-r border-gray-200 bg-gray-200 flex flex-col relative">
              <div class="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-100">
-                <div v-if="activeTask.fileUrl || activeTask.fullZipUrl" class="w-full h-full p-4">
-                  <!-- Simple Image Preview if image -->
-                  <img v-if="activeTask.fileName.match(/\.(png|jpg|jpeg)$/i)" :src="activeTask.fileUrl" class="w-full h-full object-contain" />
-                  <!-- PDF iframe placeholder -->
+                <div v-if="activeTask.fileUrl" class="w-full h-full p-4">
+                  <!-- Image Preview -->
+                  <img v-if="activeTask.fileName.match(/\.(png|jpg|jpeg|webp)$/i)" :src="activeTask.fileUrl" class="w-full h-full object-contain" />
+                  <!-- PDF Preview -->
+                  <iframe v-else-if="activeTask.fileName.match(/\.pdf$/i)" :src="activeTask.fileUrl" class="w-full h-full border-none shadow-sm bg-white"></iframe>
+                  <!-- Fallback -->
                   <div v-else class="flex flex-col items-center justify-center h-full">
-                     <Icon icon="mdi:file-pdf-box" class="w-20 h-20 text-red-400 mb-4" />
-                     <p>PDF/文档 预览</p>
-                     <p class="text-sm text-gray-500 mt-2">（原文件预览功能待完善）</p>
+                     <Icon icon="mdi:file-document-outline" class="w-20 h-20 text-gray-400 mb-4" />
+                     <p>暂不支持预览此格式: {{ activeTask.fileName }}</p>
                   </div>
                 </div>
-                <div v-else class="text-center">
-                  <Icon icon="mdi:eye-off-outline" class="w-12 h-12 mx-auto mb-2" />
-                  <p>原文件未加载</p>
+                <div v-else class="text-center p-8">
+                  <div v-if="activeTask.fullZipUrl" class="mb-4">
+                    <Icon icon="mdi:package-variant-closed" class="w-16 h-16 mx-auto text-indigo-200" />
+                    <p class="text-sm mt-2 text-gray-500">历史任务暂不支持原文件在线预览</p>
+                    <p class="text-xs text-gray-400">（源文件未持久化存储）</p>
+                  </div>
+                  <div v-else>
+                    <Icon icon="mdi:eye-off-outline" class="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>原文件未加载</p>
+                  </div>
                 </div>
              </div>
-             <div class="absolute top-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-xs backdrop-blur-md">
+             <div class="absolute top-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-xs backdrop-blur-md z-10">
                原始文档
              </div>
           </div>

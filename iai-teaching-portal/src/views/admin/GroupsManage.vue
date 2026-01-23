@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import type { Group } from '@/types'
+import { useAuth } from '@/composables/useAuth'
 
 const groups = ref<Group[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const currentItem = ref<Group | null>(null)
 const isEditing = ref(false)
+const saving = ref(false)
+
+const { token, hasPermission } = useAuth()
+const canManageEntries = computed(() => hasPermission('entries.manage'))
 
 const formData = ref<Partial<Group>>({
   id: '',
@@ -20,9 +25,10 @@ const formData = ref<Partial<Group>>({
 async function loadData() {
   loading.value = true
   try {
-    const res = await fetch('/config/entries.json')
+    const res = await fetch('/api/entries/config')
+    if (!res.ok) throw new Error('加载失败')
     const data = await res.json()
-    groups.value = data.groups || []
+    groups.value = (data.groups || []).sort((a: Group, b: Group) => a.order - b.order)
   } catch (error) {
     console.error('加载数据失败:', error)
   } finally {
@@ -37,7 +43,6 @@ function openAddDialog() {
   isEditing.value = false
   currentItem.value = null
   formData.value = {
-    id: `group-${Date.now()}`,
     name: '',
     icon: 'mdi:folder',
     order: groups.value.length + 1
@@ -54,58 +59,110 @@ function openEditDialog(item: Group) {
 }
 
 // 保存
-function handleSave() {
+async function handleSave() {
   if (!formData.value.name) {
     alert('请填写分组名称')
     return
   }
 
-  if (isEditing.value && currentItem.value) {
-    // 编辑
-    const index = groups.value.findIndex(g => g.id === currentItem.value!.id)
-    if (index !== -1) {
-      groups.value[index] = formData.value as Group
-    }
-  } else {
-    // 新增
-    groups.value.push(formData.value as Group)
+  if (!canManageEntries.value) {
+    alert('无权限保存分组')
+    return
   }
 
-  groups.value.sort((a, b) => a.order - b.order)
-  dialogVisible.value = false
-  alert('保存成功！请记得同步更新 entries.json 文件中的 groups 数组')
+  saving.value = true
+  try {
+    const payload = {
+      name: formData.value.name,
+      icon: formData.value.icon || 'mdi:folder',
+      order: Number(formData.value.order) || 0
+    }
+
+    const isEdit = isEditing.value && currentItem.value
+    const endpoint = isEdit ? `/api/admin/groups/${currentItem.value!.id}` : '/api/admin/groups'
+    const method = isEdit ? 'PUT' : 'POST'
+
+    const res = await fetch(endpoint, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.value}`
+      },
+      body: JSON.stringify(payload)
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.message || '保存失败')
+    }
+
+    dialogVisible.value = false
+    await loadData()
+  } catch (e: any) {
+    alert(e.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
 }
 
 // 删除
-function handleDelete(item: Group) {
+async function handleDelete(item: Group) {
   if (confirm(`确定删除"${item.name}"吗？\n注意：删除分组后，属于该分组的入口将无法显示！`)) {
-    const index = groups.value.findIndex(g => g.id === item.id)
-    if (index !== -1) {
-      groups.value.splice(index, 1)
-      alert('删除成功！请记得同步更新 entries.json 文件')
+    if (!canManageEntries.value) {
+      alert('无权限删除分组')
+      return
+    }
+    try {
+      const res = await fetch(`/api/admin/groups/${item.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token.value}` }
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.message || '删除失败')
+      }
+      await loadData()
+    } catch (e: any) {
+      alert(e.message || '删除失败')
     }
   }
 }
 
+async function persistOrders() {
+  if (!canManageEntries.value) return
+  const updates = groups.value.map((g) =>
+    fetch(`/api/admin/groups/${g.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.value}`
+      },
+      body: JSON.stringify({ order: g.order })
+    }).catch(() => null)
+  )
+  await Promise.all(updates)
+}
+
 // 上移
-function moveUp(index: number) {
+async function moveUp(index: number) {
   if (index > 0) {
     const temp = groups.value[index]
     groups.value[index] = groups.value[index - 1]!
     groups.value[index - 1] = temp!
     // 更新 order
     groups.value.forEach((g, i) => g.order = i + 1)
+    await persistOrders()
   }
 }
 
 // 下移
-function moveDown(index: number) {
+async function moveDown(index: number) {
   if (index < groups.value.length - 1) {
     const temp = groups.value[index]
     groups.value[index] = groups.value[index + 1]!
     groups.value[index + 1] = temp!
     // 更新 order
     groups.value.forEach((g, i) => g.order = i + 1)
+    await persistOrders()
   }
 }
 
@@ -224,13 +281,13 @@ const iconOptions = [
 
             <!-- ID -->
             <div class="form-item">
-              <label class="form-label">ID（唯一标识）*</label>
+              <label class="form-label">ID（系统生成）</label>
               <input
                 v-model="formData.id"
                 type="text"
                 class="form-input"
-                placeholder="例如：teaching-flow"
-                :disabled="isEditing"
+                placeholder="保存后自动生成"
+                disabled
               />
             </div>
 

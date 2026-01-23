@@ -4,10 +4,10 @@ export interface EntryCard {
   name: string
   description: string
   icon: string // 渐变类型或图标路径
+  iconName?: string
   tags: string[]
   url: string
   status: 'available' | 'maintenance' | 'new'
-  featured: boolean
   group: string
   usage: number
   order: number
@@ -43,8 +43,17 @@ export interface AnnouncementsConfig {
   announcements: Announcement[]
 }
 
+// 前台页面 UI 配置（文案、Tips 等）
+export interface PortalUiConfig {
+  homeTitle: string
+  homeSubtitle: string
+  tipsEnabled: boolean
+  tipsTitle: string
+  tipsContent: string
+}
+
 // 过滤和排序选项
-export type SortOption = 'featured' | 'usage' | 'newest' | 'all'
+export type SortOption = 'usage' | 'newest' | 'all'
 
 export interface FilterOptions {
   searchQuery: string

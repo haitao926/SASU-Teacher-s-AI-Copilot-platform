@@ -21,8 +21,19 @@
         </p>
       </div>
       
-      <form class="mt-8 space-y-6 relative z-10" @submit.prevent="handleLogin">
+      <form class="mt-8 space-y-6 relative z-10" @submit.prevent="handleSubmit">
         <div class="space-y-4">
+          <div v-if="isRegister">
+            <label for="name" class="block text-sm font-semibold text-slate-700 mb-1.5 ml-1">姓名</label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              v-model="name"
+              class="appearance-none block w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-xl placeholder-slate-400 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200"
+              placeholder="请输入姓名"
+            />
+          </div>
           <div>
             <label for="username" class="block text-sm font-semibold text-slate-700 mb-1.5 ml-1">账号</label>
             <input
@@ -49,12 +60,18 @@
           </div>
         </div>
 
-        <div v-if="error" class="p-3 rounded-lg bg-red-50 text-red-600 text-sm text-center border border-red-100 flex items-center justify-center gap-2 animate-pulse">
-           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-           </svg>
-           {{ error }}
-        </div>
+	        <div v-if="error" class="p-3 rounded-lg bg-red-50 text-red-600 text-sm text-center border border-red-100 flex items-center justify-center gap-2 animate-pulse">
+	           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+	             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+	           </svg>
+	           {{ error }}
+	        </div>
+	        <div
+	          v-if="error && error.includes('Account locked')"
+	          class="text-xs text-slate-500 text-center leading-relaxed"
+	        >
+	          账号已锁定：请稍后再试；管理员可在后台解锁/重置密码。开发环境可在 <code>bff</code> 目录执行 <code>npm run reset:admin</code>。
+	        </div>
 
         <div>
           <button
@@ -68,13 +85,13 @@
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             </span>
-            {{ loading ? '正在验证身份...' : '登录系统' }}
+            {{ loading ? (isRegister ? '正在提交...' : '正在验证身份...') : (isRegister ? '提交注册' : '登录系统') }}
           </button>
         </div>
 
         <div class="text-center">
             <p class="text-xs text-slate-400">
-                初次使用或忘记密码？请联系<a href="#" class="text-blue-600 hover:underline">教务信息化中心</a>
+                初次使用或忘记密码？可以 <button type="button" class="text-blue-600 hover:underline" @click="isRegister = !isRegister">{{ isRegister ? '返回登录' : '自助注册' }}</button> 或联系教务信息化中心
             </p>
         </div>
       </form>
@@ -89,17 +106,35 @@ import { useAuth } from '@/composables/useAuth'
 
 const username = ref('')
 const password = ref('')
+const isRegister = ref(false)
+const name = ref('')
 const error = ref('')
 const loading = ref(false)
 const router = useRouter()
 const { login } = useAuth()
 
-const handleLogin = async () => {
+const handleSubmit = async () => {
   loading.value = true
   error.value = ''
   try {
-    await login(username.value, password.value)
-    router.push('/')
+    if (isRegister.value) {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.value, password: password.value, name: name.value || username.value })
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.message || '注册失败')
+      }
+      alert('注册成功，等待管理员审核')
+      isRegister.value = false
+      password.value = ''
+      name.value = ''
+    } else {
+      await login(username.value, password.value)
+      router.push('/')
+    }
   } catch (e: any) {
     error.value = e.message
   } finally {

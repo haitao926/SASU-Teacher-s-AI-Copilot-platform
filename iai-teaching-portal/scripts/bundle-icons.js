@@ -16,11 +16,11 @@ const usedIcons = [
   'camera-iris', 'card-account-details-outline', 'chart-line', 'chart-line-variant',
   'chat-processing', 'checkbox-marked-circle-outline', 'check-circle', 'chevron-left', 'chevron-right',
   'cloud-upload', 'content-copy', 'cursor-default-click-outline',
-  'delete-outline', 
+  'delete-outline', 'close', 'reload',
   'face-man-profile', 'file-certificate', 'file-check-outline',
   'file-document-edit', 'file-document-multiple-outline', 'file-document-outline', 'file-document-refresh',
   'file-edit-outline', 'file-hidden', 'file-pdf-box', 'file-word', 'file-word-box', 'finance', 'folder-multiple-image',
-  'folder-open', 'folder-zip', 
+  'folder-open', 'folder-zip', 'folder-search-outline',
   'gesture-tap-button', 'graph', 
   'help-circle-outline', 'history',
   'image-auto-adjust', 'image-filter-center-focus', 'image-plus', 'information-outline',
@@ -32,7 +32,9 @@ const usedIcons = [
   'robot', 'robot-confused', 'robot-happy-outline',
   'school', 'star', 'star-outline', 'star-plus-outline', 
   'text-box-search-outline', 'text-recognition', 'tools',
-  'account-school'
+  'account-school',
+  'human-male-board', 'clipboard-check', 'chart-bar', 'message-processing',
+  'checkbox-marked-circle', 'checkbox-blank-circle-outline'
 ];
 
 const outputData = {

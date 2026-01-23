@@ -9,10 +9,21 @@ import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import CategoryIcon from '@/components/common/CategoryIcon.vue'
 import { useEntries } from '@/composables/useEntries'
 import { useSearch } from '@/composables/useSearch'
-import type { EntryCard as EntryCardType } from '@/types'
+import { useAnnouncements } from '@/composables/useAnnouncements'
+import { loadPortalUiConfig } from '@/utils/config'
+import type { EntryCard as EntryCardType, PortalUiConfig } from '@/types'
 
 // 使用组合式函数
 const { groups, entries, loading: entriesLoading, loadConfig: loadEntriesConfig, recordClick, favoriteEntries } = useEntries()
+const { pinnedAnnouncements, loadConfig: loadAnnouncementsConfig } = useAnnouncements()
+
+const portalUi = ref<PortalUiConfig>({
+  homeTitle: '常用应用',
+  homeSubtitle: '您收藏的教学工具，触手可及',
+  tipsEnabled: true,
+  tipsTitle: 'AI 提问小技巧',
+  tipsContent: '试着给 AI 一个具体的“身份”，比如“你是一位有20年经验的中学数学老师”，它的回答会更专业哦。'
+})
 
 // 搜索和过滤
 const searchQuery = ref('')
@@ -23,7 +34,18 @@ const sidebarCollapsed = ref(false)
 
 // 加载配置
 onMounted(async () => {
-  await loadEntriesConfig()
+  await Promise.all([
+    loadEntriesConfig(),
+    loadAnnouncementsConfig(),
+    (async () => {
+      try {
+        portalUi.value = await loadPortalUiConfig()
+      } catch (e) {
+        // 生产环境不回退本地 portalConfig；这里保持默认文案，避免页面空白
+        console.error('[portal-ui] failed to load, using defaults', e)
+      }
+    })()
+  ])
 })
 
 // 处理卡片点击
@@ -71,6 +93,28 @@ function toggleCollapse() {
 
         <!-- 内容区 -->
         <template v-else>
+          <!-- 置顶公告 -->
+          <div v-if="!searchQuery && !selectedGroup && pinnedAnnouncements.length > 0" class="mb-6 bg-white rounded-3xl border border-slate-200 p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <Icon icon="mdi:bullhorn-outline" class="w-5 h-5 text-indigo-600" />
+              <div class="text-sm font-bold text-slate-800">公告</div>
+              <div class="text-xs text-slate-400">置顶</div>
+            </div>
+            <div class="space-y-2">
+              <div
+                v-for="item in pinnedAnnouncements.slice(0, 3)"
+                :key="item.id"
+                class="flex items-start justify-between gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100"
+              >
+                <div class="min-w-0">
+                  <div class="font-semibold text-slate-800 truncate">{{ item.title }}</div>
+                  <div class="text-xs text-slate-500 mt-0.5 line-clamp-2">{{ item.content }}</div>
+                </div>
+                <div class="text-xs text-slate-400 whitespace-nowrap">{{ item.time }}</div>
+              </div>
+            </div>
+          </div>
+
           <!-- 场景 1: 正在搜索 (显示平铺网格) -->
           <div v-if="searchQuery" class="space-y-6">
             <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -131,19 +175,22 @@ function toggleCollapse() {
             <!-- 标题区域：包含标题和小技巧 -->
             <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 mt-2">
                <div>
-                  <h2 class="text-2xl font-bold text-slate-900 tracking-tight">常用应用</h2>
-                  <p class="text-slate-500 mt-1">您收藏的教学工具，触手可及</p>
+                  <h2 class="text-2xl font-bold text-slate-900 tracking-tight">{{ portalUi.homeTitle }}</h2>
+                  <p class="text-slate-500 mt-1">{{ portalUi.homeSubtitle }}</p>
                </div>
                
                <!-- AI 小技巧卡片 (Tips) -->
-               <div class="bg-gradient-to-r from-indigo-50 to-blue-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3 max-w-lg">
+               <div
+                 v-if="portalUi.tipsEnabled"
+                 class="bg-gradient-to-r from-indigo-50 to-blue-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3 max-w-lg"
+               >
                   <div class="bg-white p-1.5 rounded-lg shadow-sm text-blue-500 mt-0.5">
                     <Icon icon="mdi:lightbulb-on-outline" class="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 class="text-sm font-bold text-slate-800 mb-0.5">💡 AI 提问小技巧</h4>
+                    <h4 class="text-sm font-bold text-slate-800 mb-0.5">{{ portalUi.tipsTitle }}</h4>
                     <p class="text-xs text-slate-600 leading-relaxed">
-                      试着给 AI 一个具体的“身份”，比如“你是一位有20年经验的中学数学老师”，它的回答会更专业哦。
+                      {{ portalUi.tipsContent }}
                     </p>
                   </div>
                </div>

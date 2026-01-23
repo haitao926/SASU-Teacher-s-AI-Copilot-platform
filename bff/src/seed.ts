@@ -8,14 +8,16 @@ async function main() {
   const tenantId = 'default'
 
   // --- Admin Account ---
-  let admin = await prisma.user.findUnique({ where: { username: 'admin' } })
+  let admin = await prisma.user.findUnique({ where: { tenantId_username: { tenantId, username: 'admin' } } })
   if (!admin) {
     admin = await prisma.user.create({
       data: {
+        tenantId,
         username: 'admin',
         password: hashPassword('admin123'),
         name: '系统管理员',
-        role: 'ADMIN'
+        role: 'ADMIN',
+        status: 'ACTIVE'
       }
     })
     console.log('Created admin account (admin/admin123)')
@@ -35,14 +37,16 @@ async function main() {
   ]
 
   for (const t of teachers) {
-    const exists = await prisma.user.findUnique({ where: { username: t.username } })
+    const exists = await prisma.user.findUnique({ where: { tenantId_username: { tenantId, username: t.username } } })
     if (!exists) {
       await prisma.user.create({
         data: {
+          tenantId,
           username: t.username,
           password: hashPassword(t.password),
           name: t.name,
-          role: 'TEACHER'
+          role: 'TEACHER',
+          status: 'ACTIVE'
         }
       })
       console.log(`Created teacher: ${t.username} (${t.name})`)
@@ -57,7 +61,7 @@ async function main() {
 
   // --- Seed Mock OCR Tasks for Teachers ---
   // Teacher 1 (Math)
-  const teacher1 = await prisma.user.findUnique({ where: { username: 'teacher1' } })
+    const teacher1 = await prisma.user.findUnique({ where: { tenantId_username: { tenantId, username: 'teacher1' } } })
   if (teacher1) {
     const ocrCount = await prisma.ocrTask.count({ where: { userId: teacher1.id } })
     if (ocrCount === 0) {
@@ -87,7 +91,7 @@ async function main() {
   }
 
   // Teacher 3 (Physics) - Smart Lens History
-  const teacher3 = await prisma.user.findUnique({ where: { username: 'teacher3' } })
+  const teacher3 = await prisma.user.findUnique({ where: { tenantId_username: { tenantId, username: 'teacher3' } } })
   if (teacher3) {
     // Note: Smart Lens history is currently stored in LocalStorage on frontend, 
     // but if we move it to DB later, we would seed it here.

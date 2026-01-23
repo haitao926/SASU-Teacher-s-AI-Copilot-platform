@@ -1,5 +1,3 @@
-// This is your Prisma schema file
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,15 +8,37 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(uuid())
-  username      String   @unique
-  password      String   // Hashed password
+  id            String         @id @default(uuid())
+  tenantId      String         @default("default")
+  username      String
+  password      String
   name          String
-  role          String   @default("TEACHER") // ADMIN, TEACHER
-  createdAt     DateTime @default(now())
+  role          String         @default("TEACHER") // ADMIN, TEACHER, VIEWER
+  status        String         @default("ACTIVE") // ACTIVE, DISABLED, LOCKED, PENDING
+  loginFailures Int            @default(0)
+  lockedUntil   DateTime?
+  metadata      String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   announcements Announcement[]
   assets        Asset[]
-  ownedTools    Tool[]   @relation("ToolOwner")
+  ownedTools    Tool[]         @relation("ToolOwner")
+  teacherProfile TeacherProfile?
+
+  @@unique([tenantId, username])
+  @@index([tenantId, role])
+  @@index([tenantId, status])
+}
+
+model TeacherProfile {
+  id        String @id @default(uuid())
+  userId    String @unique
+  isHomeroom Boolean @default(false)
+  homeroomClass String? // e.g. "1" (Class 1)
+  teachingAssignments String? // JSON: [{"class": "1", "subject": "数学"}, {"class": "2", "subject": "数学"}]
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Announcement {
@@ -26,7 +46,7 @@ model Announcement {
   title     String
   content   String
   tag       String?
-  tagType   String   @default("info") // success, warning, info, danger
+  tagType   String   @default("info")
   pinned    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -34,28 +54,25 @@ model Announcement {
   author    User?    @relation(fields: [authorId], references: [id])
 }
 
-// --- Core Plugin System ---
-
 model Tool {
-  id          String       @id @default(uuid())
-  tenantId    String       @default("default")
-  code        String       // e.g., "ocr-tool", "chat-bot"
+  id          String    @id @default(uuid())
+  tenantId    String    @default("default")
+  code        String
   name        String
   description String?
   icon        String
-  route       String       // Frontend route e.g., "/apps/ocr"
-  category    String       // "efficiency", "content", "analysis"
-  tags        String?      // JSON string array, e.g. ["AI","图形"]
-  status      String       @default("ACTIVE") // DRAFT, ACTIVE, MAINTENANCE, DEPRECATED
-  isEnabled   Boolean      @default(true)
-  order       Int          @default(0)
+  route       String
+  category    String
+  tags        String?
+  status      String    @default("ACTIVE")
+  isEnabled   Boolean   @default(true)
+  order       Int       @default(0)
   deletedAt   DateTime?
-
   ownerId     String?
-  owner       User?        @relation("ToolOwner", fields: [ownerId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   assets      Asset[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  owner       User?     @relation("ToolOwner", fields: [ownerId], references: [id])
 
   @@unique([tenantId, code])
   @@unique([tenantId, route])
@@ -64,30 +81,24 @@ model Tool {
 }
 
 model Asset {
-  id          String           @id @default(uuid())
-  tenantId    String           @default("default")
-  title       String
-  summary     String?
-
-  // Polymorphic content storage
-  content     String?          // Mermaid code, JSON, markdown...
-  contentUrl  String?          // For large binaries (image/video/etc)
-  metadata    String?          // JSON string: {size:1234,mime:"image/png"}
-  type        String           // mermaid, image, quiz-json, markdown, text, audio, video, file
-  tags        String?          // JSON string array
-  version     Int              @default(1)
-  
-  // Relationships
-  authorId    String
-  author      User             @relation(fields: [authorId], references: [id])
-  
-  toolId      String?
-  tool        Tool?            @relation(fields: [toolId], references: [id])
-  
-  visibility  String           @default("PRIVATE") // PRIVATE, INTERNAL, PUBLIC
-  deletedAt   DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id         String    @id @default(uuid())
+  tenantId   String    @default("default")
+  title      String
+  summary    String?
+  content    String?
+  contentUrl String?
+  metadata   String?
+  type       String
+  tags       String?
+  version    Int       @default(1)
+  authorId   String
+  toolId     String?
+  visibility String    @default("PRIVATE")
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  tool       Tool?     @relation(fields: [toolId], references: [id])
+  author     User      @relation(fields: [authorId], references: [id])
 
   @@index([tenantId, type])
   @@index([tenantId, visibility])
@@ -95,15 +106,13 @@ model Asset {
   @@index([tenantId, toolId])
 }
 
-// --- Academic Module ---
-
 model Student {
-  id        String   @id @default(uuid())
-  tenantId  String   @default("default")
-  name      String
-  studentId String   // 学号
-  class     String   // 班级 e.g. "701"
-  scores    Score[]
+  id          String       @id @default(uuid())
+  tenantId    String       @default("default")
+  name        String
+  studentId   String
+  class       String
+  scores      Score[]
   submissions Submission[]
 
   @@unique([tenantId, studentId])
@@ -111,12 +120,12 @@ model Student {
 }
 
 model Exam {
-  id        String   @id @default(uuid())
-  tenantId  String   @default("default")
-  name      String   // e.g. "2025-2026 First Term Final"
-  date      DateTime
-  type      String   // Midterm, Final, Quiz
-  scores    Score[]
+  id       String   @id @default(uuid())
+  tenantId String   @default("default")
+  name     String
+  date     DateTime
+  type     String
+  scores   Score[]
 
   @@unique([tenantId, name])
   @@index([tenantId, date])
@@ -126,33 +135,35 @@ model Score {
   id        String   @id @default(uuid())
   tenantId  String   @default("default")
   value     Float
-  subject   String   // Math, English...
+  subject   String
   studentId String
-  student   Student  @relation(fields: [studentId], references: [id])
   examId    String
-  exam      Exam     @relation(fields: [examId], references: [id])
-  
-  // Security: Track who last touched this record
-  updatedBy String?  
+  updatedBy String?
+  details   String?  // JSON for extra metadata (rank, totalCount, rank3, rank6)
+  sourceEventId String?
   updatedAt DateTime @updatedAt
+  exam      Exam     @relation(fields: [examId], references: [id])
+  student   Student  @relation(fields: [studentId], references: [id])
+  sourceEvent LearningEvent? @relation("ScoreSourceEvent", fields: [sourceEventId], references: [id])
 
+  @@unique([tenantId, examId, studentId, subject])
   @@index([tenantId, examId])
   @@index([tenantId, studentId])
   @@index([tenantId, subject])
+  @@index([tenantId, sourceEventId])
 }
 
-// --- Grading / Assignments ---
 model Assignment {
-  id         String   @id @default(uuid())
-  tenantId   String   @default("default")
-  name       String
-  subject    String
+  id          String       @id @default(uuid())
+  tenantId    String       @default("default")
+  name        String
+  subject     String
   description String?
-  totalPoints Float    @default(0)
-  status     String   @default("DRAFT") // DRAFT, ACTIVE, CLOSED
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  answerKeys AnswerKey[]
+  totalPoints Float        @default(0)
+  status      String       @default("DRAFT")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  answerKeys  AnswerKey[]
   submissions Submission[]
 
   @@index([tenantId, subject])
@@ -160,70 +171,88 @@ model Assignment {
 }
 
 model AnswerKey {
-  id           String   @id @default(uuid())
-  tenantId     String   @default("default")
+  id           String     @id @default(uuid())
+  tenantId     String     @default("default")
   assignmentId String
-  assignment   Assignment @relation(fields: [assignmentId], references: [id])
   questionId   String
-  questionType String   // single, multi, fill, short, essay
-  content      String   // JSON string for options/answers
-  points       Float    @default(0)
-  createdAt    DateTime @default(now())
+  questionType String
+  content      String
+  points       Float      @default(0)
+  createdAt    DateTime   @default(now())
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
 
   @@unique([tenantId, assignmentId, questionId])
 }
 
 model Submission {
-  id           String   @id @default(uuid())
-  tenantId     String   @default("default")
+  id           String         @id @default(uuid())
+  tenantId     String         @default("default")
   assignmentId String
-  assignment   Assignment @relation(fields: [assignmentId], references: [id])
   studentId    String
-  student      Student  @relation(fields: [studentId], references: [id])
-  status       String   @default("PENDING") // PENDING, PROCESSING, DONE, ERROR
-  totalScore   Float    @default(0)
-  payloadUrl   String?  // original scan url
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  status       String         @default("PENDING")
+  totalScore   Float          @default(0)
+  payloadUrl   String?
+  sourceEventId String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
   grading      GradingResult?
+  student      Student        @relation(fields: [studentId], references: [id])
+  assignment   Assignment     @relation(fields: [assignmentId], references: [id])
+  sourceEvent  LearningEvent? @relation("SubmissionSourceEvent", fields: [sourceEventId], references: [id])
 
   @@index([tenantId, assignmentId])
   @@index([tenantId, studentId])
   @@index([tenantId, status])
+  @@index([tenantId, sourceEventId])
 }
 
 model GradingResult {
-  id            String   @id @default(uuid())
-  tenantId      String   @default("default")
-  submissionId  String   @unique
-  submission    Submission @relation(fields: [submissionId], references: [id])
-  objectiveScore Float   @default(0)
-  subjectiveScore Float  @default(0)
-  totalScore     Float   @default(0)
-  details        String? // JSON string with per-question scores
-  reviewedBy     String?
-  updatedAt      DateTime @updatedAt
+  id              String     @id @default(uuid())
+  tenantId        String     @default("default")
+  submissionId    String     @unique
+  objectiveScore  Float      @default(0)
+  subjectiveScore Float      @default(0)
+  totalScore      Float      @default(0)
+  details         String?
+  reviewedBy      String?
+  updatedAt       DateTime   @updatedAt
+  submission      Submission @relation(fields: [submissionId], references: [id])
 }
-
-// --- Security Module ---
 
 model AuditLog {
   id         String   @id @default(uuid())
-  operatorId String   // User ID of the teacher/admin
-  action     String   // CREATE, UPDATE, DELETE, EXPORT
-  resource   String   // "Score", "Student"
-  resourceId String?  // The ID of the affected record
-  
-  // Critical: Store what changed. 
-  // e.g. "Changed Score from 85 to 95"
-  details    String   // JSON string containing diff
-  
+  operatorId String
+  action     String
+  resource   String
+  resourceId String?
+  details    String
   ipAddress  String?
   userAgent  String?
   createdAt  DateTime @default(now())
 }
 
-// --- Portal Entries (for dynamic config) ---
+// --- Learning Data (Event Bus) ---
+model LearningEvent {
+  id         String   @id @default(uuid())
+  tenantId   String   @default("default")
+  actorId    String
+  actorRole  String?
+  appCode    String?
+  action     String
+  targetType String?
+  targetId   String?
+  payload    String?
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  scores     Score[]      @relation("ScoreSourceEvent")
+  submissions Submission[] @relation("SubmissionSourceEvent")
+
+  @@index([tenantId, actorId])
+  @@index([tenantId, action])
+  @@index([tenantId, appCode])
+  @@index([tenantId, occurredAt])
+}
+
 model Group {
   id        String   @id @default(uuid())
   name      String
@@ -240,26 +269,69 @@ model Entry {
   description String
   icon        String
   url         String
-  status      String   // available, maintenance, new
+  status      String
   featured    Boolean  @default(false)
   order       Int
   usage       Int      @default(0)
   tags        String?
   groupId     String
-  group       Group    @relation(fields: [groupId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  group       Group    @relation(fields: [groupId], references: [id])
 }
 
-// --- OCR Task Tracking ---
+// --- Portal UI Settings (Admin configurable copy / tips) ---
+model PortalUiConfig {
+  id           String   @id @default(uuid())
+  tenantId     String   @default("default")
+  homeTitle    String   @default("常用应用")
+  homeSubtitle String   @default("您收藏的教学工具，触手可及")
+  tipsEnabled  Boolean  @default(true)
+  tipsTitle    String   @default("AI 提问小技巧")
+  tipsContent  String   @default("试着给 AI 一个具体的“身份”，比如“你是一位有20年经验的中学数学老师”，它的回答会更专业哦。")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId])
+  @@index([tenantId])
+}
+
 model OcrTask {
   id         String   @id @default(uuid())
   userId     String
   fileName   String
-  status     String   // queued, processing, done, error
-  source     String   // mock | mineru
+  status     String
+  source     String
   fullZipUrl String?
   result     String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+// --- Question Bank ---
+model Question {
+  id              String   @id @default(uuid())
+  tenantId        String   @default("default")
+  stem            String
+  type            String   // single, multi, fill, short, essay
+  options         String?  // JSON
+  answer          String?  // JSON
+  analysis        String?  // Markdown/Text
+  subject         String?
+  grade           String?
+  difficulty      Int      @default(3)
+  knowledgePoints String?  // JSON array
+  attachments     String?  // JSON array
+  sourceAssetId   String?  // Asset.id (weak link)
+  status          String   @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+  version         Int      @default(1)
+  createdBy       String?
+  updatedBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tenantId, subject])
+  @@index([tenantId, grade])
+  @@index([tenantId, status])
+  @@index([tenantId, sourceAssetId])
 }

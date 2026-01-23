@@ -14,13 +14,31 @@ export async function importScores(
   tenantId: string,
   operatorId: string,
   ip: string,
-  userAgent?: string
+  userAgent?: string,
+  context?: { actorRole?: string; appCode?: string }
 ) {
   if (!items || items.length === 0) {
     throw new Error('No data provided')
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    const sample = items[0]
+    const learningEvent = await tx.learningEvent.create({
+      data: {
+        tenantId,
+        actorId: operatorId,
+        actorRole: context?.actorRole ?? null,
+        appCode: context?.appCode ?? 'academic',
+        action: 'scores.imported',
+        targetType: 'Score',
+        payload: JSON.stringify({
+          count: items.length,
+          examName: sample?.examName,
+          subject: sample?.subject
+        })
+      }
+    })
+
     let createdScores = 0
 
     for (const item of items) {
@@ -54,14 +72,28 @@ export async function importScores(
         })
       }
 
-      await tx.score.create({
-        data: {
+      await tx.score.upsert({
+        where: {
+          tenantId_examId_studentId_subject: {
+            tenantId,
+            examId: exam.id,
+            studentId: student.id,
+            subject: item.subject
+          }
+        },
+        update: {
+          value: item.score,
+          updatedBy: operatorId,
+          sourceEventId: learningEvent.id
+        },
+        create: {
           tenantId,
           value: item.score,
           subject: item.subject,
           studentId: student.id,
           examId: exam.id,
-          updatedBy: operatorId
+          updatedBy: operatorId,
+          sourceEventId: learningEvent.id
         }
       })
       createdScores++
@@ -75,7 +107,8 @@ export async function importScores(
         details: JSON.stringify({
           count: createdScores,
           examName: items[0].examName,
-          sampleStudent: items[0].studentName
+          sampleStudent: items[0].studentName,
+          learningEventId: learningEvent.id
         }),
         ipAddress: ip,
         userAgent
@@ -268,4 +301,18 @@ export async function getScoresForExport(params: ScoreExportParams) {
     subject: item.subject,
     score: item.value
   }))
+}
+
+export async function deleteExam(tenantId: string, examId: string) {
+  return await prisma.$transaction(async (tx) => {
+    // 1. Delete Scores
+    const { count } = await tx.score.deleteMany({
+      where: { tenantId, examId }
+    })
+    // 2. Delete Exam
+    await tx.exam.delete({
+      where: { id: examId }
+    })
+    return count
+  })
 }

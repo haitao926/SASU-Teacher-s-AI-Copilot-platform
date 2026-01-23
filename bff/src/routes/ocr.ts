@@ -4,6 +4,8 @@ import type { FastifyInstance } from 'fastify'
 import AdmZip from 'adm-zip'
 import config from '../config'
 import prisma from '../utils/prisma'
+import { hasPermission } from '../utils/permissions'
+import { createAsset } from '../services/assets'
 import {
   applyUploadUrl,
   generateDataId,
@@ -30,7 +32,7 @@ interface SaveAssetBody {
   title: string
   type: string
   tags?: string[]
-  visibility?: 'PRIVATE' | 'PUBLIC'
+  visibility?: 'PRIVATE' | 'INTERNAL' | 'PUBLIC'
 }
 
 interface OcrTask {
@@ -229,6 +231,112 @@ export default async function registerOcrRoutes(app: FastifyInstance) {
       } catch (e: any) {
         request.log.error(e)
         return reply.code(500).send({ message: 'Failed to process export: ' + e.message })
+      }
+    }
+  )
+
+  // MinerU artifacts: list files inside result zip (for debugging / advanced parsing like bbox/layout)
+  app.get<{ Params: { id: string } }>(
+    '/ocr/artifacts/:id',
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['ocr'],
+        summary: 'List MinerU result artifacts in zip',
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const { id } = request.params
+      if (!mineruEnabled()) return reply.code(501).send({ message: 'Artifacts not supported in Mock mode' })
+
+      try {
+        const state = await getTaskState(id)
+        if (state.status !== 'done') return reply.code(202).send(state)
+        if (!state.fullZipUrl) return reply.code(404).send({ message: 'Result zip not found' })
+
+        const zipRes = await fetch(state.fullZipUrl)
+        if (!zipRes.ok) throw new Error('Failed to download ZIP from storage')
+        const buffer = Buffer.from(await zipRes.arrayBuffer())
+        const zip = new AdmZip(buffer)
+        const entries = zip
+          .getEntries()
+          .filter((e: any) => !e.isDirectory && !e.entryName.startsWith('__MACOSX'))
+          .map((e: any) => ({ name: e.entryName, size: e.header?.size ?? e.getData().length }))
+
+        return {
+          taskId: state.taskId,
+          status: state.status,
+          fullZipUrl: state.fullZipUrl,
+          artifacts: entries
+        }
+      } catch (err: any) {
+        request.log.error({ err }, 'mineru artifacts failed')
+        return reply.code(500).send({ message: err?.message ?? 'MinerU artifacts 查询失败' })
+      }
+    }
+  )
+
+  // MinerU artifacts: fetch a specific file in result zip by exact entry name
+  app.get<{ Params: { id: string }, Querystring: { name: string } }>(
+    '/ocr/artifact/:id',
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['ocr'],
+        summary: 'Fetch a MinerU artifact file from zip',
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' }
+          }
+        },
+        querystring: {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string' }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const { id } = request.params
+      const name = String(request.query?.name ?? '')
+      if (!name) return reply.code(400).send({ message: 'name is required' })
+      if (!mineruEnabled()) return reply.code(501).send({ message: 'Artifacts not supported in Mock mode' })
+
+      try {
+        const state = await getTaskState(id)
+        if (state.status !== 'done') return reply.code(202).send(state)
+        if (!state.fullZipUrl) return reply.code(404).send({ message: 'Result zip not found' })
+
+        const zipRes = await fetch(state.fullZipUrl)
+        if (!zipRes.ok) throw new Error('Failed to download ZIP from storage')
+        const buffer = Buffer.from(await zipRes.arrayBuffer())
+        const zip = new AdmZip(buffer)
+        const entry = zip
+          .getEntries()
+          .find((e: any) => !e.isDirectory && !e.entryName.startsWith('__MACOSX') && e.entryName === name)
+        if (!entry) return reply.code(404).send({ message: 'Artifact not found' })
+
+        const data = entry.getData()
+        const lower = name.toLowerCase()
+        if (lower.endsWith('.json')) reply.header('Content-Type', 'application/json; charset=utf-8')
+        else if (lower.endsWith('.md') || lower.endsWith('.txt')) reply.header('Content-Type', 'text/plain; charset=utf-8')
+        else if (lower.endsWith('.html')) reply.header('Content-Type', 'text/html; charset=utf-8')
+        else reply.header('Content-Type', 'application/octet-stream')
+        return reply.send(data)
+      } catch (err: any) {
+        request.log.error({ err }, 'mineru artifact fetch failed')
+        return reply.code(500).send({ message: err?.message ?? 'MinerU artifact 获取失败' })
       }
     }
   )
@@ -439,7 +547,7 @@ export default async function registerOcrRoutes(app: FastifyInstance) {
             title: { type: 'string' },
             type: { type: 'string', description: 'e.g. quiz-json, markdown, courseware' },
             tags: { type: 'array', items: { type: 'string' } },
-            visibility: { type: 'string', enum: ['PRIVATE', 'PUBLIC'] }
+            visibility: { type: 'string', enum: ['PRIVATE', 'INTERNAL', 'PUBLIC'] }
           }
         }
       }
@@ -447,7 +555,12 @@ export default async function registerOcrRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params
       const { title, type, tags, visibility = 'PRIVATE' } = request.body
-      const user = request.user as { sub: string }
+      const user = request.user as any
+      const tenantId = request.tenantId ?? 'default'
+
+      if (visibility === 'PUBLIC' && !(user?.role === 'ADMIN' || hasPermission(user, 'assets.manage_all'))) {
+        return reply.code(403).send({ message: 'Only asset admin can set PUBLIC visibility' })
+      }
 
       let result = ''
       let fullZipUrl: string | undefined = ''
@@ -467,17 +580,15 @@ export default async function registerOcrRoutes(app: FastifyInstance) {
         return reply.code(400).send({ message: 'OCR result is empty, cannot save.' })
       }
 
-      const asset = await prisma.asset.create({
-        data: {
-          tenantId: 'default',
-          title,
-          type, 
-          content: result,
-          contentUrl: fullZipUrl || null,
-          tags: tags ? JSON.stringify(tags) : '[]',
-          visibility,
-          authorId: user.sub
-        }
+      const asset = await createAsset({
+        tenantId,
+        authorId: user.sub,
+        title,
+        type,
+        content: result,
+        contentUrl: fullZipUrl || undefined,
+        tags,
+        visibility
       })
 
       return { success: true, assetId: asset.id }

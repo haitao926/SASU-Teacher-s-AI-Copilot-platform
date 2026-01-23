@@ -21,17 +21,26 @@ export function useAnnouncements() {
           read: false
         }))
       } else {
-        console.warn('API unavailable, falling back to static config')
-        const config = await loadAnnouncementsConfig()
-        announcements.value = config.announcements
+        if (import.meta.env.DEV) {
+          console.warn('[announcements] api unavailable (dev), fallback to static config')
+          const config = await loadAnnouncementsConfig()
+          announcements.value = config.announcements
+        } else {
+          console.error('[announcements] api unavailable (prod)')
+          announcements.value = []
+        }
       }
     } catch (error) {
       console.error('Error loading announcements:', error)
-      // Fallback
-      try {
-        const config = await loadAnnouncementsConfig()
-        announcements.value = config.announcements
-      } catch (e) {}
+      if (import.meta.env.DEV) {
+        // Fallback (dev only)
+        try {
+          const config = await loadAnnouncementsConfig()
+          announcements.value = config.announcements
+        } catch (e) {}
+      } else {
+        announcements.value = []
+      }
     } finally {
       loading.value = false
     }

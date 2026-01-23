@@ -19,9 +19,11 @@ export interface AssetListParams {
   tenantId: string
   userId: string
   role: string
+  keyword?: string
   type?: string
   toolId?: string
   visibility?: string
+  mine?: boolean
   limit?: number
   offset?: number
 }
@@ -51,6 +53,18 @@ interface PaginatedAssets {
   offset: number
 }
 
+export interface AssetUpdateInput {
+  title?: string
+  summary?: string | null
+  content?: string | null
+  contentUrl?: string | null
+  metadata?: Record<string, unknown> | null
+  tags?: string[] | null
+  type?: string
+  toolId?: string | null
+  visibility?: string
+}
+
 function normalizeVisibility(value?: string): string {
   const normalized = (value ?? 'PRIVATE').toUpperCase()
   if (!ASSET_VISIBILITY.includes(normalized)) {
@@ -63,6 +77,21 @@ function normalizeAssetType(value: string): string {
   const normalized = value.trim().toLowerCase()
   if (!ASSET_TYPES.includes(normalized)) {
     throw new Error(`Unsupported asset type: ${value}`)
+  }
+  return normalized
+}
+
+async function ensureToolExists(tenantId: string, toolId?: string | null): Promise<string | null> {
+  if (toolId === undefined) return null
+  const normalized = toolId?.toString().trim()
+  if (!normalized) return null
+
+  const exists = await prisma.tool.findFirst({
+    where: { id: normalized, tenantId, deletedAt: null },
+    select: { id: true }
+  })
+  if (!exists) {
+    throw new Error(`Invalid toolId: ${normalized}`)
   }
   return normalized
 }
@@ -135,6 +164,7 @@ export async function createAsset(input: AssetCreateInput): Promise<AssetView> {
 
   const visibility = normalizeVisibility(input.visibility)
   const type = normalizeAssetType(input.type)
+  const toolId = await ensureToolExists(input.tenantId, input.toolId)
 
   const asset = await prisma.asset.create({
     data: {
@@ -148,7 +178,7 @@ export async function createAsset(input: AssetCreateInput): Promise<AssetView> {
       tags: serializeTags(input.tags),
       version: 1,
       authorId: input.authorId,
-      toolId: input.toolId,
+      toolId,
       visibility
     }
   })
@@ -195,27 +225,38 @@ export async function listAssets(params: AssetListParams): Promise<PaginatedAsse
   }
 
   const visibility = params.visibility ? normalizeVisibility(params.visibility) : undefined
+  const keyword = params.keyword?.toString().trim()
+  if (keyword) {
+    baseWhere.AND = (baseWhere.AND ?? []).concat({
+      OR: [
+        { title: { contains: keyword } },
+        { summary: { contains: keyword } },
+        { content: { contains: keyword } },
+        { tags: { contains: keyword } },
+        { metadata: { contains: keyword } }
+      ]
+    })
+  }
 
   if (params.role === 'ADMIN') {
-    if (visibility) {
+    if (params.mine) {
+      baseWhere.authorId = params.userId
+      if (visibility) baseWhere.visibility = visibility
+    } else if (visibility) {
       baseWhere.visibility = visibility
     }
   } else {
-    if (visibility === 'PRIVATE') {
+    if (params.mine) {
+      baseWhere.authorId = params.userId
+      if (visibility) baseWhere.visibility = visibility
+    } else if (visibility === 'PRIVATE') {
       baseWhere.visibility = 'PRIVATE'
       baseWhere.authorId = params.userId
     } else if (visibility) {
       baseWhere.visibility = visibility
-      baseWhere.OR = [
-        { authorId: params.userId },
-        { visibility }
-      ]
+      baseWhere.OR = [{ authorId: params.userId }, { visibility }]
     } else {
-      baseWhere.OR = [
-        { authorId: params.userId },
-        { visibility: 'PUBLIC' },
-        { visibility: 'INTERNAL' }
-      ]
+      baseWhere.OR = [{ authorId: params.userId }, { visibility: 'PUBLIC' }, { visibility: 'INTERNAL' }]
     }
   }
 
@@ -235,6 +276,55 @@ export async function listAssets(params: AssetListParams): Promise<PaginatedAsse
     limit,
     offset
   }
+}
+
+export async function updateAsset(
+  assetId: string,
+  tenantId: string,
+  userId: string,
+  role: string,
+  data: AssetUpdateInput
+): Promise<AssetView | null | false> {
+  const existing = await prisma.asset.findUnique({ where: { id: assetId } })
+  if (!existing || existing.deletedAt || existing.tenantId !== tenantId) {
+    return null
+  }
+
+  const isOwner = existing.authorId === userId
+  const canUpdate = role === 'ADMIN' || isOwner
+  if (!canUpdate) {
+    return false
+  }
+
+  const updateData: any = {}
+
+  if (data.title !== undefined) updateData.title = data.title
+  if (data.summary !== undefined) updateData.summary = data.summary
+  if (data.content !== undefined) updateData.content = data.content
+  if (data.contentUrl !== undefined) updateData.contentUrl = data.contentUrl
+
+  if (data.metadata !== undefined) {
+    updateData.metadata = data.metadata ? serializeMetadata(data.metadata) : null
+  }
+  if (data.tags !== undefined) {
+    updateData.tags = data.tags ? serializeTags(data.tags) : null
+  }
+  if (data.type !== undefined) {
+    updateData.type = normalizeAssetType(data.type)
+  }
+  if (data.visibility !== undefined) {
+    updateData.visibility = normalizeVisibility(data.visibility)
+  }
+  if (data.toolId !== undefined) {
+    updateData.toolId = await ensureToolExists(tenantId, data.toolId)
+  }
+
+  const updated = await prisma.asset.update({
+    where: { id: assetId },
+    data: updateData
+  })
+
+  return toAssetView(updated)
 }
 
 export async function softDeleteAsset(assetId: string, tenantId: string, userId: string, role: string) {

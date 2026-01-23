@@ -80,3 +80,10 @@ pre {
   border-radius: 12px;
   overflow: auto;
 }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+  .container { max-width: none; width: 100%; margin: 0; padding: 0; }
+  .card { border: none; box-shadow: none; padding: 0; background: transparent; }
+}

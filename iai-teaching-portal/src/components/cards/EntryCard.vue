@@ -34,12 +34,16 @@ function handleClick(entry: EntryCard) {
   if (entry.url.startsWith('/')) {
     router.push(entry.url)
   } else {
-    // 外部链接/子应用跳转：追加 Token 实现免登
+    // 外部链接/子应用跳转：
+    // - 默认不透传 token（避免泄露）
+    // - 开发环境仅对 localhost/127.0.0.1 追加 token 便于联调
     try {
       const urlObj = new URL(entry.url)
-      // 只有当我们有 token 时才追加，且仅针对 localhost 或信任的域名 (这里简化为都追加)
-      if (token.value) {
-        urlObj.searchParams.append('auth_token', token.value)
+      const isLocalDevHost = ['localhost', '127.0.0.1'].includes(urlObj.hostname)
+      const canPassToken = import.meta.env.DEV && isLocalDevHost
+
+      if (token.value && canPassToken && !urlObj.searchParams.has('auth_token')) {
+        urlObj.searchParams.set('auth_token', token.value)
       }
       window.open(urlObj.toString(), '_blank', 'noopener,noreferrer')
     } catch (e) {

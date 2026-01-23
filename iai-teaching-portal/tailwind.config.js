@@ -3,6 +3,8 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{vue,js,ts,jsx,tsx}",
+    "../apps/quiz-grading/src/**/*.{vue,js,ts,jsx,tsx}",
+    "../apps/*/src/**/*.{vue,js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {

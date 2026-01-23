@@ -1,12 +1,17 @@
-
 import prisma from '../../utils/prisma'
 import PDFDocument from 'pdfkit'
 import fs from 'fs'
 import path from 'path'
+import * as XLSX from 'xlsx'
 
 // Font path detection for local dev on macOS
-const FONT_PATH = '/System/Library/Fonts/STHeiti Light.ttc'
-const FONT_FALLBACK = 'Helvetica' // Will break Chinese, but better than crash
+const FONT_FALLBACK = 'Helvetica'
+
+interface TranscriptOptions {
+  subjects?: string[]
+  extraColumns?: string[]
+  hideEmptyRows?: boolean
+}
 
 export async function searchStudents(tenantId: string, query: string) {
   if (!query) return []
@@ -22,109 +27,353 @@ export async function searchStudents(tenantId: string, query: string) {
   })
 }
 
-export async function generateTranscriptPDF(tenantId: string, studentId: string, examId?: string) {
-  // 1. Fetch Data
-  const student = await prisma.student.findUnique({
-    where: { id: studentId }
+export async function getStudentScores(tenantId: string, studentId: string) {
+  return prisma.score.findMany({
+    where: { tenantId, studentId },
+    include: { exam: true },
+    orderBy: {
+      exam: { date: 'desc' }
+    }
   })
+}
+
+export async function listExams(tenantId: string) {
+  const exams = await prisma.exam.findMany({
+    where: { tenantId },
+    include: {
+      _count: {
+        select: { scores: true }
+      }
+    },
+    orderBy: { date: 'desc' }
+  })
+  
+  return exams.map(e => ({
+    id: e.id,
+    name: e.name,
+    date: e.date,
+    type: e.type,
+    scoreCount: e._count.scores
+  }))
+}
+
+export async function deleteExam(tenantId: string, examId: string) {
+  return prisma.$transaction(async (tx) => {
+    const exam = await tx.exam.findUnique({ where: { id: examId } })
+    if (!exam || exam.tenantId !== tenantId) throw new Error('Exam not found')
+    await tx.score.deleteMany({ where: { examId } })
+    return tx.exam.delete({ where: { id: examId } })
+  })
+}
+
+// --- Shared Data Preparation ---
+async function prepareTranscriptData(
+  tenantId: string, 
+  studentId: string, 
+  examIds?: string[],
+  options?: TranscriptOptions
+) {
+  // 1. Fetch Student
+  const student = await prisma.student.findUnique({ where: { id: studentId } })
   if (!student || student.tenantId !== tenantId) throw new Error('Student not found')
 
-  // If examId is provided, filter by it. Else get all or latest.
-  // For transcript, usually we want a specific exam or "All history".
-  // Let's assume specific exam for now based on the request "transcript template".
-  const whereScore: any = { tenantId, studentId }
-  let examTitle = '学生成绩单'
+  const classCount = await prisma.student.count({
+    where: { tenantId, class: student.class }
+  })
 
-  if (examId) {
-    whereScore.examId = examId
-    const exam = await prisma.exam.findUnique({ where: { id: examId } })
-    if (exam) examTitle = exam.name + ' 成绩单'
+  // 2. Fetch Scores
+  const whereScore: any = { tenantId, studentId }
+  if (examIds && examIds.length > 0) {
+    whereScore.examId = { in: examIds }
   }
 
   const scores = await prisma.score.findMany({
     where: whereScore,
     include: { exam: true },
-    orderBy: { subject: 'asc' }
+    orderBy: [
+      { exam: { date: 'asc' } },
+      { subject: 'asc' }
+    ]
   })
 
-  // 2. Setup PDF
-  const doc = new PDFDocument({ size: 'A4', margin: 50 })
-  
-  // Try to load Chinese font
-  let fontToUse = FONT_FALLBACK
-  if (fs.existsSync('/System/Library/Fonts/STHeiti Medium.ttc')) {
-    fontToUse = '/System/Library/Fonts/STHeiti Medium.ttc'
-  } else if (fs.existsSync('/System/Library/Fonts/PingFang.ttc')) {
-    fontToUse = '/System/Library/Fonts/PingFang.ttc'
-  }
+  if (scores.length === 0) throw new Error('No scores found for the selected criteria')
 
-  // Helper to draw lines
-  const drawLine = (y: number) => {
-    doc.strokeColor('#aaaaaa').lineWidth(1).moveTo(50, y).lineTo(545, y).stroke()
-  }
-
-  // --- Header ---
-  doc.font(fontToUse).fontSize(24).text('SASU 学校成绩单', { align: 'center' })
-  doc.moveDown(0.5)
-  doc.fontSize(16).text(examTitle, { align: 'center' })
-  doc.moveDown(2)
-
-  // --- Student Info Box ---
-  const startY = doc.y
-  doc.rect(50, startY, 495, 80).strokeColor('#333').stroke()
+  // 3. Columns
+  const targetSubjects = options?.subjects || ['语文', '数学', '英语', '物理', '化学', '生物', '政治', '历史', '地理', '技术']
+  const extraCols = options?.extraColumns || ['总分', '名次']
   
-  doc.fontSize(12).text(`姓名: ${student.name}`, 70, startY + 20)
-  doc.text(`学号: ${student.studentId}`, 300, startY + 20)
-  doc.text(`班级: ${student.class}`, 70, startY + 50)
-  doc.text(`打印日期: ${new Date().toLocaleDateString()}`, 300, startY + 50)
-  
-  doc.moveDown(4)
+  const columns = [
+    { header: '考试名称', key: 'name' },
+    ...targetSubjects.map(s => ({ header: s, key: s })),
+    ...extraCols.map(c => ({ header: c, key: c }))
+  ]
 
-  // --- Scores Table ---
-  const tableTop = doc.y + 20
-  const colX = { subject: 50, score: 250, grade: 350, comment: 450 }
+  // 4. Rows
+  const examMap = new Map<string, any>()
+  scores.forEach(s => {
+    if (!examMap.has(s.examId)) {
+      examMap.set(s.examId, { info: s.exam, scores: {} })
+    }
+    const entry = examMap.get(s.examId)
+    entry.scores[s.subject] = s.value
+    if (s.details) {
+      try {
+        const meta = JSON.parse(s.details)
+        Object.assign(entry.scores, meta)
+      } catch(e) {}
+    }
+  })
+
+  const sortedExams = Array.from(examMap.values()).sort((a, b) => new Date(a.info.date).getTime() - new Date(b.info.date).getTime())
+
+  // 5. Calculate Total Students per Exam (for Rank denominator)
+  // We use Promise.all to fetch counts in parallel
+  const examStudentCounts = new Map<string, number>()
+  await Promise.all(sortedExams.map(async (item) => {
+    // Count distinct students who have scores for this exam
+    // Note: This counts 'participation', which is accurate for 'Total Students'.
+    // However, if it's a Grade exam, it counts Grade. If Class exam, counts Class.
+    const count = await prisma.score.groupBy({
+      by: ['studentId'],
+      where: { 
+        tenantId, 
+        examId: item.info.id 
+      }
+    })
+    examStudentCounts.set(item.info.id, count.length)
+  }))
+
+  return { student, classCount, columns, sortedExams, examStudentCounts }
+}
+
+// --- Excel Generator ---
+export async function generateTranscriptExcel(
+  tenantId: string, 
+  studentId: string, 
+  examIds?: string[],
+  options?: TranscriptOptions
+): Promise<Buffer> {
+  const { student, classCount, columns, sortedExams, examStudentCounts } = await prepareTranscriptData(tenantId, studentId, examIds, options)
+
+  const aoa: any[][] = []
   
+  // Header Info
+  aoa.push(['上海科技大学附属学校（中学） 成绩单'])
+  aoa.push([`姓名: ${student.name}`, `班级: ${student.class}`, `学号: ${student.studentId}`, `班级人数: ${classCount}`])
+  aoa.push([]) 
+
   // Table Header
-  doc.fontSize(12).font(fontToUse)
-  doc.text('科目', colX.subject, tableTop, { bold: true })
-  doc.text('分数', colX.score, tableTop, { bold: true })
-  doc.text('等级', colX.grade, tableTop, { bold: true })
-  doc.text('备注', colX.comment, tableTop, { bold: true })
-  
-  drawLine(tableTop + 20)
+  aoa.push(columns.map(c => c.header))
 
-  let rowY = tableTop + 35
-  scores.forEach(score => {
-    doc.text(score.subject, colX.subject, rowY)
-    doc.text(String(score.value), colX.score, rowY)
-    
-    // Simple grading logic (demo)
-    let grade = 'F'
-    if (score.value >= 90) grade = 'A'
-    else if (score.value >= 80) grade = 'B'
-    else if (score.value >= 70) grade = 'C'
-    else if (score.value >= 60) grade = 'D'
-    doc.text(grade, colX.grade, rowY)
-    
-    doc.text('', colX.comment, rowY) // Placeholder for comment
-    
-    drawLine(rowY + 20)
-    rowY += 30
+  // Table Data
+  sortedExams.forEach(item => {
+    const totalCount = examStudentCounts.get(item.info.id) || 0
+    const row = columns.map(col => {
+      if (col.key === 'name') return item.info.name
+      
+      let val = item.scores[col.key] ?? ''
+      // Fallback Logic
+      if (!val && (col.key.includes('排名') || col.key.includes('名次') || col.key.includes('排'))) {
+         if (col.key.includes('3')) val = item.scores['3排'] || item.scores['rank3']
+         else if (col.key.includes('6')) val = item.scores['6排'] || item.scores['rank6']
+         else if (col.key === '班级排名') val = item.scores['classRank'] || item.scores['班排'] || item.scores['rank']
+         else if (col.key === '年级排名') val = item.scores['gradeRank'] || item.scores['年排']
+         else if (col.key === '名次') val = item.scores['rank'] || item.scores['班排'] || item.scores['6排']
+         
+         // Format: Rank / Total
+         if (val && totalCount > 0) {
+           val = `${val} / ${totalCount}`
+         }
+      }
+      if (!val && col.key.includes('总分') && col.key !== '总分') {
+         if (col.key.includes('3')) val = item.scores['3总'] || item.scores['total3']
+         if (col.key.includes('6')) val = item.scores['6总'] || item.scores['total6']
+      }
+      return val
+    })
+    aoa.push(row)
   })
 
-  // --- Summary ---
-  const totalScore = scores.reduce((acc, s) => acc + s.value, 0)
-  const avgScore = scores.length ? (totalScore / scores.length).toFixed(1) : '0.0'
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
   
-  doc.moveDown(2)
-  doc.text(`总分: ${totalScore}    平均分: ${avgScore}`, 50, rowY + 20)
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: columns.length - 1 } }]
+  ws['!cols'] = columns.map(() => ({ wch: 15 }))
+  ws['!cols'][0] = { wch: 30 }
 
-  // --- Footer ---
-  const footerY = 750
-  doc.fontSize(10).text('校长/教务处签名:', 50, footerY)
-  drawLine(footerY + 15) // Signature line
-  doc.text('SASU AI Teaching Copilot 生成', 50, footerY + 30, { align: 'center', color: '#888' })
+  XLSX.utils.book_append_sheet(wb, ws, '成绩单')
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+}
 
-  doc.end()
-  return doc
+// --- PDF Generator ---
+export async function generateTranscriptPDF(
+  tenantId: string, 
+  studentId: string, 
+  examIds?: string[],
+  options?: TranscriptOptions
+): Promise<Buffer> {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const { student, classCount, columns, sortedExams, examStudentCounts } = await prepareTranscriptData(tenantId, studentId, examIds, options)
+
+      const doc = new PDFDocument({ size: 'A4', margin: 40 })
+      const buffers: Buffer[] = []
+      
+      doc.on('data', (chunk) => buffers.push(chunk))
+      doc.on('end', () => resolve(Buffer.concat(buffers)))
+      doc.on('error', (err) => reject(err))
+      
+      // Font loading
+      let fontPath = ''
+      const fonts = [
+        '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
+        '/System/Library/Fonts/PingFang.ttc', 
+        '/System/Library/Fonts/STHeiti Medium.ttc',
+        '/System/Library/Fonts/SimHei.ttf'
+      ]
+      
+      for (const f of fonts) {
+        if (fs.existsSync(f)) {
+          fontPath = f
+          if (f.endsWith('.ttc')) {
+             try {
+               const fontkit = require('fontkit')
+               const collection = fontkit.openSync(f)
+               doc.registerFont('Chinese', collection.fonts[0])
+             } catch(e) { doc.registerFont('Chinese', f) }
+          } else {
+             doc.registerFont('Chinese', f)
+          }
+          break
+        }
+      }
+      doc.font(fontPath ? 'Chinese' : FONT_FALLBACK)
+
+      // Helper: Draw Bold Text
+      const drawBold = (text: string, x: number, y: number, width?: number, align: 'left'|'center'|'right' = 'left', strokeWidth = 0.4) => {
+        doc.save()
+        doc.lineWidth(strokeWidth)
+        ;(doc as any).addContent('2 Tr') 
+        const opts: any = { align }
+        if (width) opts.width = width
+        doc.text(text, x, y, opts)
+        ;(doc as any).addContent('0 Tr') 
+        doc.restore()
+      }
+
+      // Header
+      const logoPath = path.resolve(process.cwd(), '../logo.png')
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, 40, 40, { width: 50 })
+      }
+      
+      // Title
+      doc.fontSize(18)
+      drawBold('上海科技大学附属学校（中学） 成绩单', 0, 50, 595, 'center', 0.8)
+      
+      // Info
+      doc.fontSize(12)
+      doc.text(`学生姓名：${student.name}`, 50, 90)
+      doc.text(`班级：${student.class}`, 200, 90)
+      doc.text(`学号：${student.studentId}`, 350, 90)
+      doc.text(`班级人数：${classCount}`, 480, 90)
+
+      // Layout
+      const startY = 130
+      let currentY = startY
+      const dataRowHeight = 25
+      const headerRowHeight = 35
+      const tableWidth = 515 
+      
+      // Calc Widths
+      const renderCols = columns.map(c => ({ ...c, width: 0 }))
+      const fixedWidth = 100
+      const dynamicCount = renderCols.length - 1
+      const dynamicWidth = Math.floor((tableWidth - fixedWidth) / Math.max(1, dynamicCount))
+      renderCols.slice(1).forEach(c => c.width = dynamicWidth)
+      renderCols[0].width = fixedWidth
+
+      const drawCell = (text: string, x: number, y: number, w: number, h: number, isHeader = false) => {
+        doc.rect(x, y, w, h).stroke()
+        if (text) {
+           doc.fontSize(9)
+           const padY = isHeader ? (text.length > 3 ? 6 : 12) : 8
+           if (isHeader) {
+             drawBold(text, x, y + padY, w, 'center', 0.3)
+           } else {
+             doc.text(text, x, y + padY, { width: w, align: 'center' })
+           }
+        }
+      }
+
+      // Header Row
+      let currentX = 40
+      renderCols.forEach(col => {
+        drawCell(col.header, currentX, currentY, col.width, headerRowHeight, true)
+        currentX += col.width
+      })
+      currentY += headerRowHeight
+
+      // Data Rows
+      sortedExams.forEach(item => {
+        currentX = 40
+        const totalCount = examStudentCounts.get(item.info.id) || 0
+        
+        renderCols.forEach(col => {
+          let val = ''
+          if (col.key === 'name') {
+            val = item.info.name
+          } else {
+            val = item.scores[col.key] ?? ''
+            if (!val && (col.key.includes('排名') || col.key.includes('名次') || col.key.includes('排'))) {
+               if (col.key.includes('3')) val = item.scores['3排'] || item.scores['rank3']
+               else if (col.key.includes('6')) val = item.scores['6排'] || item.scores['rank6']
+               else if (col.key === '班级排名') val = item.scores['classRank'] || item.scores['班排'] || item.scores['rank']
+               else if (col.key === '年级排名') val = item.scores['gradeRank'] || item.scores['年排']
+               else if (col.key === '名次') val = item.scores['rank'] || item.scores['班排'] || item.scores['6排']
+               
+               // Append Total Count
+               if (val && totalCount > 0) {
+                 val = `${val} / ${totalCount}`
+               }
+            }
+            if (!val && col.key.includes('总分') && col.key !== '总分') {
+               if (col.key.includes('3')) val = item.scores['3总'] || item.scores['total3']
+               if (col.key.includes('6')) val = item.scores['6总'] || item.scores['total6']
+            }
+          }
+          
+          drawCell(String(val || ''), currentX, currentY, col.width, dataRowHeight)
+          currentX += col.width
+        })
+
+        currentY += dataRowHeight
+        if (currentY > 750) {
+          doc.addPage()
+          currentY = 50
+        }
+      })
+
+      // Footer
+      currentY += 20
+      // Notes removed as requested
+      
+      currentY += 40
+      const sigY = currentY
+      drawBold('学校相关部门（盖章）：', 50, sigY, undefined, 'left', 0.4)
+      drawBold('经办人签字：', 350, sigY, undefined, 'left', 0.4)
+      
+      currentY += 40
+      drawBold('经办人联系电话：', 350, currentY, undefined, 'left', 0.4)
+      
+      currentY += 30
+      const now = new Date()
+      const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`
+      doc.text(`日期：${dateStr}`, 350, currentY)
+
+      doc.end()
+    } catch (e) {
+      reject(e)
+    }
+  })
 }

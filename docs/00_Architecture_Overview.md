@@ -2,6 +2,8 @@
 
 > **Version**: 1.0 (Prototype)
 > **Last Updated**: 2026-01-05
+>
+> ⚠️ 该文档为原型期口径；统一架构与“微应用 + 内容/学习数据中台”规范请以 `docs/07_Platform_Architecture_MicroApps_Content.md` 为准。
 
 ## 1. 项目定位与目标
 

@@ -11,7 +11,8 @@ const dialogVisible = ref(false)
 const currentEntry = ref<EntryCard | null>(null)
 const isEditing = ref(false)
 const saving = ref(false)
-const { isAdmin } = useAuth()
+const { hasPermission, token } = useAuth()
+const canManageEntries = computed(() => hasPermission('entries.manage'))
 
 // 表单数据
 const formData = ref<Partial<EntryCard>>({
@@ -22,7 +23,6 @@ const formData = ref<Partial<EntryCard>>({
   tags: [],
   url: '',
   status: 'available',
-  featured: false,
   group: '',
   usage: 0,
   order: 0
@@ -78,7 +78,6 @@ function openAddDialog() {
     tags: [],
     url: '',
     status: 'available',
-    featured: false,
     group: groups.value[0]?.id || '',
     usage: 0,
     order: entries.value.length + 1
@@ -101,8 +100,8 @@ async function handleSave() {
     return
   }
 
-  if (!isAdmin.value) {
-    alert('仅管理员可保存入口配置')
+  if (!canManageEntries.value) {
+    alert('无权限保存入口配置')
     return
   }
 
@@ -114,7 +113,6 @@ async function handleSave() {
       icon: formData.value.icon || 'gradient-blue',
       url: formData.value.url,
       status: formData.value.status || 'available',
-      featured: !!formData.value.featured,
       order: formData.value.order ?? 0,
       group: formData.value.group || '',
       tags: formData.value.tags || [],
@@ -127,7 +125,10 @@ async function handleSave() {
 
     const res = await fetch(endpoint, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.value}`
+      },
       body: JSON.stringify(payload)
     })
 
@@ -150,13 +151,16 @@ async function handleSave() {
 // 删除
 async function handleDelete(entry: EntryCard) {
   if (confirm(`确定删除"${entry.name}"吗？`)) {
-    if (!isAdmin.value) {
-      alert('仅管理员可删除入口配置')
+    if (!canManageEntries.value) {
+      alert('无权限删除入口配置')
       return
     }
 
     try {
-      const res = await fetch(`/api/admin/entries/${entry.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/admin/entries/${entry.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token.value}` }
+      })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.message || '删除失败')
@@ -258,7 +262,6 @@ const statusOptions = [
             <th width="200">标签</th>
             <th width="100">状态</th>
             <th width="80">使用量</th>
-            <th width="80">推荐</th>
             <th width="150">操作</th>
           </tr>
         </thead>
@@ -288,13 +291,6 @@ const statusOptions = [
               </span>
             </td>
             <td class="text-center">{{ entry.usage }}</td>
-            <td class="text-center">
-              <Icon
-                :icon="entry.featured ? 'mdi:star' : 'mdi:star-outline'"
-                class="w-5 h-5"
-                :class="entry.featured ? 'text-yellow-500' : 'text-gray-300'"
-              />
-            </td>
             <td>
               <div class="flex gap-2">
                 <button class="btn-icon" title="编辑" @click="openEditDialog(entry)">
@@ -309,7 +305,7 @@ const statusOptions = [
         </tbody>
         <tbody v-else>
           <tr>
-            <td colspan="9" class="text-center py-8 text-gray-500">
+            <td colspan="8" class="text-center py-8 text-gray-500">
               <Icon icon="mdi:loading" class="w-6 h-6 animate-spin inline-block" />
               加载中...
             </td>
@@ -440,17 +436,6 @@ const statusOptions = [
               </div>
             </div>
 
-            <!-- 推荐 -->
-            <div class="form-item col-span-2">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input
-                  v-model="formData.featured"
-                  type="checkbox"
-                  class="form-checkbox"
-                />
-                <span class="form-label mb-0">设为推荐入口</span>
-              </label>
-            </div>
           </div>
         </div>
 

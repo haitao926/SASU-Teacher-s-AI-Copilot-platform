@@ -1,21 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useDropZone, useStorage } from '@vueuse/core'
-import { read, utils } from 'xlsx'
+import { useStorage } from '@vueuse/core'
 
 const token = useStorage('iai-token', '')
-const isDragging = ref(false)
-const dropZoneRef = ref<HTMLElement | null>(null)
-const filesData = ref<any[]>([])
-const loading = ref(false)
-const uploadStatus = ref<'idle' | 'success' | 'error'>('idle')
-const statusMessage = ref('')
 const exams = ref<any[]>([])
-const selectedExam = ref('')
+const selectedExam = ref<string>('')
 
-// 后端地址
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api/academic/scores'
+// Analysis State
+const analysisData = ref<any[]>([])
+const analysisLoading = ref(false)
+const selectedStudent = ref<any>(null)
+const studentTrend = ref<any[]>([])
+const showDetailModal = ref(false)
+
+const API_BASE = '/api/academic/scores'
 
 onMounted(async () => {
   const params = new URLSearchParams(window.location.search)
@@ -27,6 +26,9 @@ onMounted(async () => {
     window.history.replaceState({ path: newUrl }, '', newUrl)
   }
   await fetchExams()
+  if (exams.value.length > 0) {
+    fetchAnalysis()
+  }
 })
 
 async function fetchExams() {
@@ -36,87 +38,70 @@ async function fetchExams() {
     })
     if (res.ok) {
       exams.value = await res.json()
-      if (exams.value.length > 0) selectedExam.value = exams.value[0].id
+      if (exams.value.length > 0 && !selectedExam.value) {
+        selectedExam.value = exams.value[0].id
+      }
     }
   } catch (e) { console.error(e) }
 }
 
-async function processFile(file: File) {
-  loading.value = true
-  uploadStatus.value = 'idle'
-  
+async function fetchAnalysis() {
+  if (!selectedExam.value) return
+  analysisLoading.value = true
   try {
-    const data = await file.arrayBuffer()
-    const workbook = read(data)
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-    const jsonData = utils.sheet_to_json(worksheet)
-    
-    if (jsonData.length === 0) throw new Error('Excel 文件为空')
-
-    const mappedData = jsonData.map((row: any) => ({
-      studentName: row['姓名'] || row['Name'],
-      studentId: String(row['学号'] || row['ID']),
-      className: String(row['班级'] || row['Class']),
-      subject: row['科目'] || row['Subject'] || '综合',
-      score: Number(row['成绩'] || row['分数'] || row['Score']),
-      examName: row['考试名称'] || row['Exam'] || '默认考试'
-    }))
-
-    if (!mappedData[0].studentName || !mappedData[0].score) {
-      throw new Error('Excel 格式不正确，缺少"姓名"或"成绩"列')
-    }
-
-    const res = await fetch(`${API_BASE}/upload`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token.value}`,
-        'x-tenant-id': 'default'
-      },
-      body: JSON.stringify({ data: mappedData })
+    const res = await fetch(`${API_BASE}/scores?examId=${selectedExam.value}&subject=总分&limit=1000`, {
+      headers: { 'Authorization': `Bearer ${token.value}` }
     })
-
-    if (!res.ok) throw new Error('上传失败: ' + res.statusText)
-
-    const result = await res.json()
-    uploadStatus.value = 'success'
-    statusMessage.value = `成功导入 ${result.count} 条成绩数据！`
-    filesData.value = mappedData
-    await fetchExams() // Refresh exam list
-
-  } catch (err: any) {
-    console.error(err)
-    uploadStatus.value = 'error'
-    statusMessage.value = err.message || '处理文件时发生错误'
+    if (res.ok) {
+      const data = await res.json()
+      analysisData.value = data.items.map((item: any) => {
+        let details: any = {}
+        try { details = JSON.parse(item.details || '{}') } catch (e) {}
+        return {
+          ...item,
+          rankClass: details['班级排名'] || '-',
+          rankGrade: details['6排'] || details['rank'] || '-',
+          totalCount: details['totalCount'] || '-'
+        }
+      }).sort((a: any, b: any) => b.value - a.value)
+    }
+  } catch (e) {
+    console.error(e)
   } finally {
-    loading.value = false
+    analysisLoading.value = false
   }
 }
 
-function onDrop(files: File[] | null) {
-  isDragging.value = false
-  if (files && files.length > 0) processFile(files[0])
+async function openStudentDetail(student: any) {
+  selectedStudent.value = student
+  showDetailModal.value = true
+  try {
+    const res = await fetch(`${API_BASE}/scores/trend/${student.studentId}`, {
+      headers: { 'Authorization': `Bearer ${token.value}` }
+    })
+    if (res.ok) {
+      studentTrend.value = await res.json()
+    }
+  } catch (e) { console.error(e) }
 }
 
-async function onFileSelect(event: Event) {
-  const input = event.target as HTMLInputElement
-  if (input.files && input.files.length > 0) {
-    await processFile(input.files[0])
-    input.value = ''
-  }
-}
-
-const { isOverDropZone } = useDropZone(dropZoneRef, {
-  onDrop,
-  onEnter: () => isDragging.value = true,
-  onLeave: () => isDragging.value = false,
-})
-
-// Export Logic
 async function exportCsv() {
   if (!selectedExam.value) return
-  const url = `${API_BASE}/export?examId=${selectedExam.value}&format=csv`
-  window.open(url, '_blank')
+  try {
+    const res = await fetch(`${API_BASE}/scores/export?examId=${encodeURIComponent(selectedExam.value)}&format=csv`, {
+      headers: { 'Authorization': `Bearer ${token.value}` }
+    })
+    if (!res.ok) throw new Error('导出失败')
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `scores_${selectedExam.value}.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  } catch (e: any) {
+    alert(e.message || '导出失败')
+  }
 }
 </script>
 
@@ -124,16 +109,18 @@ async function exportCsv() {
   <div class="min-h-screen flex flex-col bg-slate-50">
     <!-- Header -->
     <header class="bg-white border-b border-gray-200 h-16 flex items-center px-6 justify-between sticky top-0 z-50 shadow-sm">
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
-          <Icon icon="mdi:chart-box" class="w-5 h-5" />
+      <div class="flex items-center gap-6">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
+            <Icon icon="mdi:chart-box" class="w-5 h-5" />
+          </div>
+          <h1 class="text-lg font-bold text-gray-900">学生成绩全景分析</h1>
         </div>
-        <h1 class="text-lg font-bold text-gray-900">学生成绩全景分析</h1>
       </div>
       
       <div class="flex items-center gap-4">
         <div v-if="exams.length > 0" class="flex items-center gap-2">
-           <select v-model="selectedExam" class="text-sm border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+           <select v-model="selectedExam" @change="fetchAnalysis()" class="text-sm border-gray-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
              <option v-for="e in exams" :key="e.id" :value="e.id">{{ e.name }}</option>
            </select>
            <button @click="exportCsv" class="btn-secondary">
@@ -150,78 +137,93 @@ async function exportCsv() {
 
     <!-- Main -->
     <main class="flex-1 p-8 max-w-7xl mx-auto w-full">
-      
-      <div class="max-w-2xl mx-auto mt-12 text-center">
-        <h2 class="text-3xl font-extrabold text-slate-900 mb-4 tracking-tight">
-          让数据告诉您<br/>该如何教学
-        </h2>
-        <p class="text-lg text-slate-500 mb-10 max-w-lg mx-auto leading-relaxed">
-          上传期中/期末考试成绩单 (Excel)，系统将自动归档并提供多维度分析与导出功能。
-        </p>
-
-        <!-- Upload Zone -->
-        <div v-if="uploadStatus !== 'success'"
-          ref="dropZoneRef"
-          class="border-2 border-dashed rounded-3xl p-12 transition-all duration-300 cursor-pointer group bg-white relative overflow-hidden shadow-sm hover:shadow-md"
-          :class="[
-            isOverDropZone ? 'border-indigo-500 bg-indigo-50 scale-[1.02]' : 'border-slate-300 hover:border-indigo-400 hover:bg-slate-50',
-            uploadStatus === 'error' ? 'border-red-300 bg-red-50' : ''
-          ]"
-          @click="($refs.fileInput as HTMLInputElement).click()"
-        >
-           <div v-if="loading" class="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-10 backdrop-blur-sm">
-             <Icon icon="mdi:loading" class="w-12 h-12 text-indigo-600 animate-spin mb-3" />
-             <p class="text-indigo-600 font-medium">正在解析并安全上传数据...</p>
-           </div>
-
-           <div class="flex flex-col items-center gap-4">
-             <div class="w-16 h-16 rounded-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
-                :class="uploadStatus === 'error' ? 'bg-red-100 text-red-500' : 'bg-indigo-100 text-indigo-600'"
-             >
-               <Icon :icon="uploadStatus === 'error' ? 'mdi:alert-circle' : 'mdi:cloud-upload'" class="w-8 h-8" />
-             </div>
-             <div>
-               <p class="text-lg font-bold text-slate-700">
-                 {{ uploadStatus === 'error' ? '上传失败' : '点击或拖拽 Excel 文件到这里' }}
-               </p>
-               <p class="text-sm text-slate-400 mt-1">
-                 {{ uploadStatus === 'error' ? statusMessage : '支持 .xlsx, .xls 格式' }}
-               </p>
-             </div>
-             
-             <button class="mt-4 px-6 py-2 bg-white border border-slate-200 shadow-sm rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-               选择文件
-             </button>
-             <input type="file" ref="fileInput" class="hidden" @change="onFileSelect" accept=".xlsx,.xls" />
-           </div>
-        </div>
-
-        <!-- Success State -->
-        <div v-else class="bg-green-50 border border-green-200 rounded-3xl p-12 text-center animate-fade-in">
-           <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600">
-             <Icon icon="mdi:check-circle" class="w-10 h-10" />
-           </div>
-           <h2 class="text-2xl font-bold text-green-800 mb-2">导入成功！</h2>
-           <p class="text-green-600 mb-8">{{ statusMessage }}</p>
-           
-           <div class="flex justify-center gap-4">
-             <button @click="uploadStatus = 'idle'; filesData = []" class="px-6 py-2.5 bg-white border border-green-200 text-green-700 rounded-xl hover:bg-green-50 font-medium transition-colors">
-               继续导入
-             </button>
-             <button @click="exportCsv" class="px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 font-medium shadow-lg shadow-green-600/20 transition-all hover:-translate-y-0.5">
-               导出本次成绩
-             </button>
-           </div>
-        </div>
-
-        <div class="mt-8">
-          <button class="text-sm text-indigo-500 hover:text-indigo-700 font-medium flex items-center justify-center gap-1">
-            <Icon icon="mdi:file-download-outline" />
-            下载标准模板 (Excel)
-          </button>
+      <div class="animate-fade-in">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+            <h3 class="font-bold text-gray-800 flex items-center gap-2">
+              <Icon icon="mdi:podium" class="text-indigo-500" /> 
+              成绩排名 (总分)
+            </h3>
+            <span class="text-xs text-gray-500">共 {{ analysisData.length }} 人</span>
+          </div>
+          
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-gray-600">
+              <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-bold">
+                <tr>
+                  <th class="px-6 py-3">排名</th>
+                  <th class="px-6 py-3">姓名</th>
+                  <th class="px-6 py-3">班级</th>
+                  <th class="px-6 py-3 text-right">总分</th>
+                  <th class="px-6 py-3 text-center">年级排名</th>
+                  <th class="px-6 py-3 text-center">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr v-if="analysisLoading">
+                  <td colspan="6" class="p-8 text-center text-gray-400">
+                    <Icon icon="mdi:loading" class="animate-spin inline w-6 h-6" /> 加载中...
+                  </td>
+                </tr>
+                <tr v-else v-for="(item, index) in analysisData" :key="item.id" class="hover:bg-indigo-50/50 transition-colors group">
+                  <td class="px-6 py-4 font-bold text-gray-400">#{{ index + 1 }}</td>
+                  <td class="px-6 py-4 font-bold text-gray-900">{{ item.student.name }}</td>
+                  <td class="px-6 py-4">{{ item.student.class }}</td>
+                  <td class="px-6 py-4 text-right font-mono font-bold text-indigo-600 text-lg">{{ item.value }}</td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="px-2 py-1 bg-gray-100 rounded text-xs font-bold text-gray-600">{{ item.rankGrade }}</span>
+                  </td>
+                  <td class="px-6 py-4 text-center">
+                    <button @click="openStudentDetail(item.student)" class="text-indigo-600 hover:text-indigo-800 font-medium text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                      查看详情
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="!analysisLoading && analysisData.length === 0">
+                  <td colspan="6" class="p-12 text-center text-gray-400">
+                    <div class="flex flex-col items-center gap-2">
+                       <Icon icon="mdi:database-off" class="w-8 h-8 text-gray-300" />
+                       <p>暂无数据</p>
+                       <p class="text-xs text-gray-400">请前往“测评数据管理”应用上传考试数据</p>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </main>
+
+    <!-- Student Detail Modal -->
+    <div v-if="showDetailModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
+      <div class="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-2xl animate-fade-in flex flex-col max-h-[90vh]">
+        <div class="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
+          <div>
+            <h3 class="text-2xl font-bold text-gray-900">{{ selectedStudent?.name }}</h3>
+            <p class="text-sm text-gray-500">{{ selectedStudent?.class }} | {{ selectedStudent?.studentId }}</p>
+          </div>
+          <button @click="showDetailModal = false" class="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100">
+            <Icon icon="mdi:close" class="w-6 h-6" />
+          </button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto pr-2">
+          <h4 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+            <Icon icon="mdi:history" /> 历史成绩趋势
+          </h4>
+          <div class="bg-slate-50 rounded-xl p-4 mb-6 border border-gray-200">
+             <div class="space-y-2">
+               <div v-for="s in studentTrend" :key="s.id" class="flex justify-between text-sm border-b border-gray-200 last:border-0 pb-2">
+                 <span>{{ s.exam.name }} - {{ s.subject }}</span>
+                 <span class="font-bold text-indigo-600">{{ s.value }}</span>
+               </div>
+               <div v-if="studentTrend.length === 0" class="text-center text-gray-400 py-4">暂无历史数据</div>
+             </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 

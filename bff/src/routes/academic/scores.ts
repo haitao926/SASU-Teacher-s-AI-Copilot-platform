@@ -8,9 +8,9 @@ import {
   listScores,
   getScoreSummary,
   getStudentTrend,
-  getScoresForExport
+  getScoresForExport,
+  deleteExam
 } from '../../services/academic/scores'
-import { getTenantId } from '../../utils/tenant'
 import { FastifyReply } from 'fastify'
 import PDFDocument from 'pdfkit'
 
@@ -19,14 +19,17 @@ const scoresRoutes: FastifyPluginAsync = async (fastify, opts) => {
   fastify.post<{ Body: { data: ScoreUploadItem[] } }>('/upload', {
     preHandler: [fastify.authenticate]
   }, async (request, reply) => {
-    const user = request.user as { sub: string }
+    const user = request.user as any
     const operatorId = user?.sub || 'system'
     const ip = request.ip
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     const items = request.body.data
     
     try {
-      const result = await importScores(items, tenantId, operatorId, ip, request.headers['user-agent'])
+      const result = await importScores(items, tenantId, operatorId, ip, request.headers['user-agent'], {
+        actorRole: user?.role,
+        appCode: 'student-stats'
+      })
       return { success: true, count: result, message: `Successfully imported ${result} scores.` }
 
     } catch (error) {
@@ -38,7 +41,7 @@ const scoresRoutes: FastifyPluginAsync = async (fastify, opts) => {
   // 2. 获取统计概览 (Dashboard)
   fastify.get('/stats', { preHandler: [fastify.authenticate] }, async (request) => {
     const user = request.user as { sub: string }
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     return getScoreStats(tenantId, user.sub)
   })
 
@@ -54,7 +57,7 @@ const scoresRoutes: FastifyPluginAsync = async (fastify, opts) => {
       }
     }
   }, async (request) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     return listStudents(tenantId, (request.query as any).class)
   })
 
@@ -62,7 +65,7 @@ const scoresRoutes: FastifyPluginAsync = async (fastify, opts) => {
   fastify.get('/exams', {
     preHandler: [fastify.authenticate]
   }, async (request) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     return listExams(tenantId)
   })
 
@@ -82,7 +85,7 @@ const scoresRoutes: FastifyPluginAsync = async (fastify, opts) => {
       }
     }
   }, async (request) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     const q = request.query as any
     return listScores({
       tenantId,
@@ -107,7 +110,7 @@ const scoresRoutes: FastifyPluginAsync = async (fastify, opts) => {
       }
     }
   }, async (request, reply) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     const q = request.query as any
     if (!q.examId) {
       return reply.code(400).send({ message: 'examId is required' })
@@ -123,7 +126,7 @@ const scoresRoutes: FastifyPluginAsync = async (fastify, opts) => {
   fastify.get('/scores/trend/:studentId', {
     preHandler: [fastify.authenticate]
   }, async (request, reply) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     const { studentId } = request.params as any
     if (!studentId) {
       return reply.code(400).send({ message: 'studentId is required' })
@@ -146,7 +149,7 @@ const scoresRoutes: FastifyPluginAsync = async (fastify, opts) => {
       }
     }
   }, async (request, reply: FastifyReply) => {
-    const tenantId = getTenantId(request.headers)
+    const tenantId = request.tenantId ?? 'default'
     const q = request.query as any
     const rows = await getScoresForExport({
       tenantId,
@@ -203,6 +206,23 @@ const scoresRoutes: FastifyPluginAsync = async (fastify, opts) => {
         .header('Content-Type', 'text/csv; charset=utf-8')
         .header('Content-Disposition', `attachment; filename="scores_${q.examId}.csv"`)
         .send(csv)
+    }
+  })
+
+  // 9. 删除考试
+  fastify.delete('/exams/:examId', {
+    preHandler: [fastify.authenticate]
+  }, async (request, reply) => {
+    const tenantId = request.tenantId ?? 'default'
+    const { examId } = request.params as any
+    if (!examId) return reply.code(400).send({ message: 'examId is required' })
+
+    try {
+      const count = await deleteExam(tenantId, examId)
+      return { success: true, message: `Exam deleted. Removed ${count} scores.` }
+    } catch (e: any) {
+      if (e.code === 'P2025') return reply.code(404).send({ message: 'Exam not found' })
+      throw e
     }
   })
 }

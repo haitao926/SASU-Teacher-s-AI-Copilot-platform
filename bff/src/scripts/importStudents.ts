@@ -1,6 +1,9 @@
 import fs from 'fs'
 import path from 'path'
+import dotenv from 'dotenv'
 import prisma from '../utils/prisma'
+
+dotenv.config()
 
 interface StudentRow {
   studentId: string

@@ -7,6 +7,9 @@ interface User {
   name: string
   role: string
   roles?: string[]
+  permissions?: string[]
+  subjects?: string[]
+  classes?: string[]
 }
 
 // Helper for safe JSON parse
@@ -34,6 +37,23 @@ export function useAuth() {
 
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => user.value?.role === 'ADMIN')
+  const permissions = computed(() => Array.isArray(user.value?.permissions) ? user.value!.permissions! : [])
+
+  function hasPermission(permission: string): boolean {
+    if (isAdmin.value) return true
+    const perms = permissions.value
+    if (perms.includes('*')) return true
+    return perms.includes(permission)
+  }
+
+  const canAccessAdmin = computed(() => {
+    if (isAdmin.value) return true
+    const perms = permissions.value
+    if (perms.includes('*')) return true
+    // Any explicit admin permission implies access.
+    if (perms.includes('admin.access')) return true
+    return perms.some((p) => p.endsWith('.manage') || p.endsWith('.view_all') || p.endsWith('.view'))
+  })
 
   // Helper to sync state to localStorage
   function setAuth(newToken: string | null, newUser: User | null) {
@@ -81,11 +101,15 @@ export function useAuth() {
 
   async function login(username: string, password: string) {
     try {
+      const normalizedUsername = username.trim()
+      if (!normalizedUsername) {
+        throw new Error('请输入账号')
+      }
       console.log('[Auth] Logging in...')
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username: normalizedUsername, password })
       })
 
       if (!res.ok) {
@@ -132,6 +156,9 @@ export function useAuth() {
     loadingProfile,
     isLoggedIn,
     isAdmin,
+    permissions,
+    hasPermission,
+    canAccessAdmin,
     login,
     logout,
     fetchProfile

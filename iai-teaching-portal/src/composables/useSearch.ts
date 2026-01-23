@@ -29,9 +29,6 @@ export function useSearch(entries: Ref<EntryCard[]>) {
 
     // 排序
     switch (sortBy.value) {
-      case 'featured':
-        result = result.filter(entry => entry.featured)
-        break
       case 'usage':
         result.sort((a, b) => b.usage - a.usage)
         break

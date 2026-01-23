@@ -6,6 +6,8 @@ const API_BASE = '/api/academic/scores'
 // Use relative path or configured alias if possible, or keep absolute for now
 const STATS_APP_URL = 'http://localhost:5174' 
 
+const token = ref<string>(localStorage.getItem('iai-token') || '')
+
 const exams = ref<{ id: string; name: string; date: string; type: string }[]>([])
 const selectedExam = ref('')
 const classFilter = ref('')
@@ -16,7 +18,9 @@ const errorMsg = ref('')
 
 async function fetchExams() {
   try {
-    const res = await fetch(`${API_BASE}/exams`)
+    const res = await fetch(`${API_BASE}/exams`, {
+      headers: { 'Authorization': `Bearer ${token.value}` }
+    })
     if (!res.ok) throw new Error('无法获取考试列表')
     const data = await res.json()
     exams.value = Array.isArray(data) ? data : []
@@ -39,7 +43,9 @@ async function fetchSummary() {
   try {
     const params = new URLSearchParams({ examId: selectedExam.value })
     if (classFilter.value) params.set('class', classFilter.value)
-    const res = await fetch(`${API_BASE}/scores/summary?${params.toString()}`)
+    const res = await fetch(`${API_BASE}/scores/summary?${params.toString()}`, {
+      headers: { 'Authorization': `Bearer ${token.value}` }
+    })
     if (!res.ok) throw new Error('获取成绩概览失败')
     summary.value = await res.json()
   } catch (err: any) {
@@ -60,7 +66,9 @@ async function exportScores() {
   try {
     const params = new URLSearchParams({ examId: selectedExam.value, format: 'csv' })
     if (classFilter.value) params.set('class', classFilter.value)
-    const res = await fetch(`${API_BASE}/scores/export?${params.toString()}`)
+    const res = await fetch(`${API_BASE}/scores/export?${params.toString()}`, {
+      headers: { 'Authorization': `Bearer ${token.value}` }
+    })
     if (!res.ok) throw new Error('导出失败')
     const blob = await res.blob()
     const url = window.URL.createObjectURL(blob)
@@ -76,12 +84,15 @@ async function exportScores() {
   }
 }
 
-function openUploader() {
-  // Direct to the separate app URL
-  window.open(STATS_APP_URL, '_blank', 'noopener')
-}
-
 onMounted(() => {
+  const params = new URLSearchParams(window.location.search)
+  const authToken = params.get('auth_token')
+  if (authToken) {
+    token.value = authToken
+    localStorage.setItem('iai-token', authToken)
+    const newUrl = window.location.protocol + '//' + window.location.host + window.location.pathname
+    window.history.replaceState({ path: newUrl }, '', newUrl)
+  }
   fetchExams()
 })
 </script>
@@ -97,10 +108,6 @@ onMounted(() => {
         </div>
       </div>
       <div class="flex gap-2">
-        <button @click="openUploader" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg shadow-sm hover:bg-primary/90">
-          <Icon icon="mdi:upload" />
-          成绩上传入口
-        </button>
         <button @click="exportScores" :disabled="loadingExport" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-60">
           <Icon icon="mdi:file-download" />
           {{ loadingExport ? '导出中...' : '导出成绩表 (CSV)' }}
